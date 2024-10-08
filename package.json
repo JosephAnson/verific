@@ -1,0 +1,51 @@
+{
+  "name": "verific",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "packageManager": "pnpm@9.12.1",
+  "description": "Vue Validation Library",
+  "author": "Joseph Anson <me@josephanson.com>",
+  "license": "MIT",
+  "homepage": "https://josephanson.com/",
+  "repository": "https://github.com/josephanson/verific",
+  "scripts": {
+    "test": "vitest",
+    "lint": "eslint . '**/*.{js,jsx,ts,tsx}'",
+    "lint:fix": "eslint . '**/*.{js,jsx,ts,tsx}' --fix",
+    "cover": "vitest run --coverage",
+    "postversion": "pnpm build",
+    "typecheck": "pnpm tsc --noEmit --project ./tsconfig.json --skipLibCheck",
+    "dev": "cd ./packages/docs && pnpm dev",
+    "release": "npx changelogen@latest --release"
+  },
+  "peerDependencies": {
+    "vue": "^3.4.26"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^3.7.3",
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
+    "@types/node": "^22.7.5",
+    "@verific/core": "workspace:*",
+    "@vitest/coverage-v8": "^2.1.2",
+    "@vue/devtools-api": "^7.4.6",
+    "eslint": "^9.12.0",
+    "jsdom": "^25.0.1",
+    "lint-staged": "^15.2.10",
+    "raf-stub": "^3.0.0",
+    "rollup": "^4.24.0",
+    "rollup-plugin-dts": "^6.1.1",
+    "type-fest": "^4.26.1",
+    "typescript": "5.3.3",
+    "vite-tsconfig-paths": "^5.0.1",
+    "vitest": "^2.1.2",
+    "vue": "^3.5.11"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "vitest run related --passWithNoTests"
+    ]
+  }
+}
