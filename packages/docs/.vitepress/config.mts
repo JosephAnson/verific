@@ -10,11 +10,11 @@ const Components = [
 ]
 
 const CoreConcepts = [
-  { text: 'Service Layer to Validation', link: '/service-layer-to-validation' },
+  { text: 'Service Layer to Validation', link: '/guide/service-layer-to-validation' },
 ]
 
 const Integrations = [
-  { text: 'Nuxt Plugin Guide', link: '/nuxt' },
+  { text: 'Nuxt Plugin Guide', link: '/guide/nuxt' },
 ]
 
 export default defineConfig({

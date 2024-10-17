@@ -18,13 +18,22 @@ hero:
       link: /guide/why
 
 features:
-  - icon: "🔍" # Example icon for Model-Driven Validation
+  - icon: "🔍"
     title: Model-Driven Validation
     details: "Leverage your data models to automatically validate forms with ease."
-  - icon: "🔗" # Example icon for Seamless Integration
+  - icon: "🔗"
     title: Seamless Integration
     details: "Integrate with your existing Vue applications without hassle."
-  - icon: "⚙️" # Example icon for Customizable Rules
+  - icon: "⚙️"
     title: Customizable Rules
     details: "Define custom validation rules to suit your application's needs."
+  - icon: "🪄"
+    title: Nested Components Support
+    details: "Easily validate forms with nested components, ensuring a seamless validation experience."
+  - icon: "🚀"
+    title: Nuxt Support
+    details: "Easily integrate Verific with Nuxt 3 for enhanced form validation capabilities."
+  - icon: "🦾"
+    title: Type Strong
+    details: "Written in TypeScript, with full TS docs"
 ---
