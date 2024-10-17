@@ -26,7 +26,7 @@ const [useProvideValidate, _useValidate] = createInjectionState(<Data>() => {
 
   const hasFieldErrors = computed(() => Object.values(fieldErrors.value).some(error => !!error.value?.length))
 
-  watch(() => [validations.value, ...watchTargets], () => {
+  watch(() => [...watchTargets], () => {
     validationCheck()
   }, { deep: true })
 

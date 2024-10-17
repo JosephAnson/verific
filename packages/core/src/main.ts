@@ -1,4 +1,7 @@
-import { useError, ZodIssueCode } from './utils/useError'
+import { ErrorMessages } from './components/ErrorMessages'
 import { useProvideValidate, useValidate } from './core'
+import { createMessageArray, type Messages } from './utils/createMessageArray'
 
-export { useError, useProvideValidate, useValidate, ZodIssueCode }
+import { useError, ZodIssueCode } from './utils/useError'
+
+export { createMessageArray, ErrorMessages, Messages, useError, useProvideValidate, useValidate, ZodIssueCode }

@@ -1,6 +1,6 @@
 import type { App, ComputedRef, Ref } from 'vue'
-import { VERIFIC_WATCH_TARGETS_KEY } from './utils/constants'
 import { useProvideValidate, useValidate } from './main'
+import { VERIFIC_WATCH_TARGETS_KEY } from './utils/constants'
 
 interface VerificPluginOptions {
   watchTargets?: Array<Ref<any> | ComputedRef<any>>

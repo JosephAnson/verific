@@ -1,6 +1,22 @@
 import { defineConfig } from 'vitepress'
 
-// https://vitepress.dev/reference/site-config
+const Guide = [
+  { text: 'Getting Started', link: '/guide' },
+  { text: 'Why Verific?', link: '/guide/why' },
+]
+
+const Components = [
+  { text: 'Error Messages', link: '/guide/components/error-messages' },
+]
+
+const CoreConcepts = [
+  { text: 'Service Layer to Validation', link: '/service-layer-to-validation' },
+]
+
+const Integrations = [
+  { text: 'Nuxt Plugin Guide', link: '/nuxt' },
+]
+
 export default defineConfig({
   title: 'Verific - Model-Based Validation for Vue 3',
   description: 'Model-Based Validation for Vue 3',
@@ -12,33 +28,15 @@ export default defineConfig({
     logo: '/logo.png',
     nav: [
       { text: 'Home', link: '/' },
-      { text: 'Introduction', link: '/why' },
-      {
-        text: 'Playground',
-        link: 'https://stackblitz.com/edit/vaxee-playground?file=src%2FApp.vue',
-      },
+      { text: 'Introduction', link: '/guide/why' },
+      { text: 'Playground', link: 'https://stackblitz.com/edit/vaxee-playground?file=src%2FApp.vue' },
     ],
 
     sidebar: [
-      {
-        text: 'Introduction',
-        items: [
-          { text: 'Why Verific?', link: '/why' },
-          { text: 'Getting Started', link: '/getting-started' },
-        ],
-      },
-      {
-        text: 'Core Concepts',
-        items: [
-          { text: 'Service Layer to Validation', link: '/service-layer-to-validation' },
-        ],
-      },
-      {
-        text: 'Nuxt Integration',
-        items: [
-          { text: 'Nuxt Plugin Guide', link: '/nuxt' },
-        ],
-      },
+      { text: 'Guide', items: Guide },
+      { text: 'Components', items: Components },
+      { text: 'Core Concepts', items: CoreConcepts },
+      { text: 'Integrations', items: Integrations },
     ],
 
     socialLinks: [

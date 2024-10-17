@@ -15,15 +15,19 @@ You can install Verific using your preferred package manager. Below are the comm
 ::: code-group
 
 ```bash [pnpm]
-pnpm add verific
+pnpm add @verific/core
+```
+
+```bash [npm]
+npm add @verific/core
 ```
 
 ```bash [yarn]
-yarn add verific
+yarn add @verific/core
 ```
 
 ```bash [bun]
-bun add verific
+bun add @verific/core
 ```
 
 :::
@@ -35,7 +39,7 @@ bun add verific
 After installing Verific, you can import it into your project.
 
 ```typescript
-import { createVerific } from 'verific'
+import { createVerific } from '@verific/core'
 import { createApp } from 'vue'
 import App from './App.vue'
 

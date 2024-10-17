@@ -12,10 +12,10 @@ hero:
   actions:
     - theme: brand
       text: Getting Started
-      link: /getting-started
+      link: /guide
     - theme: alt
       text: Why Verific?
-      link: /why
+      link: /guide/why
 
 features:
   - icon: "🔍" # Example icon for Model-Driven Validation

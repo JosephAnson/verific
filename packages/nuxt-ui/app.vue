@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useError, useProvideValidate, useValidate } from '@verific/core'
+import { ErrorMessages, useError, useProvideValidate, useValidate } from '@verific/core'
 import { ref } from 'vue'
 import { z } from 'zod'
 
@@ -39,8 +39,13 @@ async function onSubmit(event: Event) {
       >
         <UInput v-model="email" type="email" />
         <div class="space-y-1 mt-2">
-          <span v-if="useError(errors.email, 'too_small')" class="w-full text-sm block text-red-400">This field is required</span>
-          <span v-if="useError(errors.email, 'invalid_string')" class="w-full text-sm block text-red-400">This string is valid</span>
+          <ErrorMessages
+            :messages="{
+              ['This field is required']: useError(errors.email, 'too_small'),
+              ['This string is valid']: useError(errors.email, 'invalid_string'),
+            }"
+            class="w-full text-sm block text-red-400"
+          />
         </div>
       </UFormGroup>
 
