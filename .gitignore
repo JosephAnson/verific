@@ -12,8 +12,11 @@ dist
 .DS_STORE
 
 lerna-debug.log
-packages/*/src/playground.ts
+playgrounds/*/src/playground.ts
 
 # vitepress
-packages/docs/.vitepress/dist
-packages/docs/.vitepress/cache
+playgrounds/docs/.vitepress/dist
+playgrounds/docs/.vitepress/cache
+
+# nuxt
+.nuxt

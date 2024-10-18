@@ -5,19 +5,23 @@
   "private": true,
   "packageManager": "pnpm@9.12.1",
   "description": "Vue Validation Library",
-  "author": "Joseph Anson <me@josephanson.com>",
+  "author": "Joseph Anson <https://github.com/josephanson>",
   "license": "MIT",
   "homepage": "https://josephanson.com/",
-  "repository": "https://github.com/josephanson/verific",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/josephanson/verific.git"
+  },
   "scripts": {
-    "test": "vitest",
+    "build": "pnpm -r build",
     "lint": "eslint . '**/*.{js,jsx,ts,tsx}'",
     "lint:fix": "eslint . '**/*.{js,jsx,ts,tsx}' --fix",
-    "cover": "vitest run --coverage",
-    "postversion": "pnpm build",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "pnpm tsc --noEmit --project ./tsconfig.json --skipLibCheck",
-    "dev": "cd ./packages/docs && pnpm dev",
-    "release": "npx changelogen@latest --release"
+    "dev": "cd ./playgrounds/docs && pnpm dev",
+    "publish:ci": "esno scripts/publish.ts",
+    "release": "bumpp"
   },
   "peerDependencies": {
     "vue": "^3.4.26"
@@ -30,7 +34,9 @@
     "@verific/core": "workspace:*",
     "@vitest/coverage-v8": "^2.1.2",
     "@vue/devtools-api": "^7.4.6",
+    "bumpp": "^9.7.1",
     "eslint": "^9.12.0",
+    "esno": "^4.8.0",
     "jsdom": "^25.0.1",
     "lint-staged": "^15.2.10",
     "raf-stub": "^3.0.0",

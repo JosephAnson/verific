@@ -2,13 +2,16 @@
   "name": "@verific/core",
   "version": "0.0.1",
   "description": "Vue Validation Library",
-  "author": "Joseph Anson <me@josephanson.com>",
+  "author": "Joseph Anson <https://github.com/josephanson>",
   "license": "MIT",
   "homepage": "https://verific.josephanson.com/",
   "repository": {
-    "url": "https://github.com/josephanson/verific.git",
+    "url": "git+https://github.com/josephanson/verific.git",
     "type": "git",
     "directory": "packages/verific"
+  },
+  "bugs": {
+    "url": "https://github.com/josephanson/verific/issues"
   },
   "keywords": [
     "VueJS",
