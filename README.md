@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://verific.josephanson.com" target="_blank">
-    <img src="https://raw.githubusercontent.com/josephanson/verific/main/logo.png" width="200" title="Go to website">
+    <img src="https://verific.josephanson.com/logo.png" width="200" title="Go to website">
   </a>
 </p>
 
@@ -18,23 +18,10 @@ Painless Vue forms
   <img src="https://img.shields.io/npm/dm/verific.svg?color=05bd6d&label=">
 </a>
 
-<a href="https://verific.josephanson.com/v4/" target="_blank">
+<a href="https://verific.josephanson.com/" target="_blank">
   <img src="https://img.shields.io/badge/-docs%20and%20demos-009f53">
 </a>
 
-<a href="https://github.com/sponsors/josephanson">
-  <img src="https://img.shields.io/badge/-%E2%99%A5%20Sponsors-ec5cc6">
-
-</a>
-
-</p>
-
-<br>
-
-<p align="center">
-  <a href="https://github.com/sponsors/josephanson">
-    <img src='https://sponsors.josephanson.com/sponsors.svg'>
-  </a>
 </p>
 
 <br>
@@ -46,7 +33,6 @@ Painless Vue forms
 - ⚙️ Customizable validation rules
 - ❌ Error handling
 - 🛠️ Service layer integration
-- 🌐 Nuxt 3 support
 
 ## Getting Started
 
@@ -56,16 +42,12 @@ Painless Vue forms
 
 You can install Verific using your preferred package manager. Below are the commands for npm, yarn, pnpm, and bun.
 
+```bash [npm]
+npm add verific
+```
+
 ```bash [pnpm]
 pnpm add verific
-```
-
-```bash [yarn]
-yarn add verific
-```
-
-```bash [bun]
-bun add verific
 ```
 
 ### Setting Up
