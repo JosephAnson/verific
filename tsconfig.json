@@ -12,7 +12,7 @@
       "@/*": ["packages/*/src"]
     },
     "resolveJsonModule": true,
-    "typeRoots": ["node_modules/@types", "node_modules"],
+    "typeRoots": ["node_modules/@types"],
     "strict": true,
     "strictBindCallApply": true,
     "strictFunctionTypes": true,
@@ -24,5 +24,5 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true
   },
-  "include": ["packages/*/src", "packages/*/tests", "vitest.setup.ts", "vitest.setup.ts"]
+  "include": ["packages/*/src", "packages/*/tests", "vitest.setup.ts"]
 }

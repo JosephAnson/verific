@@ -1,4 +1,6 @@
-import { resolveDynamicComponent } from 'vue'
+import type { PropType } from 'vue'
+import type { Messages } from '../utils/createMessageArray'
+import { computed, defineComponent, h, resolveDynamicComponent } from 'vue'
 import { createMessageArray } from '../utils/createMessageArray'
 
 export const ErrorMessages = /** #__PURE__ */ defineComponent({
@@ -10,7 +12,7 @@ export const ErrorMessages = /** #__PURE__ */ defineComponent({
     },
     messages: {
       type: [String, Array, Object, Boolean] as PropType<Messages>,
-      default: undefined,
+      required: true,
     },
   },
   setup(props, { attrs }) {
