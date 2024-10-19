@@ -2,7 +2,7 @@
   "name": "@verific/core",
   "version": "0.0.1",
   "description": "Vue Validation Library",
-  "author": "Joseph Anson <https://github.com/josephanson>",
+  "author": "Joseph Anson <https://github.com/antf>",
   "license": "MIT",
   "homepage": "https://verific.josephanson.com/",
   "repository": {

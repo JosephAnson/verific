@@ -1,3 +1,4 @@
-import type { ComputedRef, InjectionKey, Ref } from 'vue'
+import type { Verific } from 'src/plugin'
+import type { InjectionKey } from 'vue'
 
-export const VERIFIC_WATCH_TARGETS_KEY = Symbol('verific-watch-targets') as InjectionKey<Array<Ref<any> | ComputedRef<any>>>
+export const VERIFIC_SYMBOL = Symbol('verific') as InjectionKey<Verific>

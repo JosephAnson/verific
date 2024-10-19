@@ -1,7 +1,7 @@
 import { ErrorMessages } from './components/ErrorMessages'
-import { useProvideValidate, useValidate } from './core'
+import { createValidationScope, useValidate } from './core'
+import { createVerific } from './plugin'
 import { createMessageArray, type Messages } from './utils/createMessageArray'
-
 import { useError, ZodIssueCode } from './utils/useError'
 
-export { createMessageArray, ErrorMessages, Messages, useError, useProvideValidate, useValidate, ZodIssueCode }
+export { createMessageArray, createValidationScope, createVerific, ErrorMessages, Messages, useError, useValidate, ZodIssueCode }

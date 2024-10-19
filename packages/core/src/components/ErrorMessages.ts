@@ -1,4 +1,4 @@
-import type { PropType } from 'vue'
+import type { DefineComponent, PropType } from 'vue'
 import type { Messages } from '../utils/createMessageArray'
 import { computed, defineComponent, h, resolveDynamicComponent } from 'vue'
 import { createMessageArray } from '../utils/createMessageArray'
@@ -7,7 +7,7 @@ export const ErrorMessages = /** #__PURE__ */ defineComponent({
   name: 'ErrorMessages',
   props: {
     as: {
-      type: String as PropType<keyof HTMLElementTagNameMap>,
+      type: String as PropType<keyof HTMLElementTagNameMap | DefineComponent<any, any, any>>,
       default: 'span',
     },
     messages: {

@@ -11,10 +11,13 @@
   },
   "dependencies": {
     "@nuxt/ui": "2.18.7",
-    "@verific/core": "file:../../packages/core/dist",
+    "@verific/core": "file:../../packages/core",
     "nuxt": "^3.13.0",
     "vue": "latest",
     "vue-router": "latest",
     "zod": "^3.23.8"
+  },
+  "resolutions": {
+    "@verific/core": "file:../../packages/core"
   }
 }

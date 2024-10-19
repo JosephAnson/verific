@@ -2,8 +2,7 @@ import type { UnionToIntersection } from 'type-fest'
 import type { ComputedRef, MaybeRef, Ref } from 'vue'
 import type { z, ZodType } from 'zod'
 import { createInjectionState, tryOnScopeDispose, whenever } from '@vueuse/core'
-import { computed, inject, ref, unref, watch } from 'vue'
-import { VERIFIC_WATCH_TARGETS_KEY } from './utils/constants'
+import { computed, ref, unref, watch } from 'vue'
 
 type recursiveZodFormattedError<T> = T extends [any, ...any[]] ? {
   [K in keyof T]?: ZodFormattedError<T[K]>;
@@ -16,19 +15,13 @@ type recursiveZodFormattedError<T> = T extends [any, ...any[]] ? {
 type ZodFormattedError<T, U = string> = {
   _errors: U[]
 } & UnionToIntersection<recursiveZodFormattedError<NonNullable<T>>>
-const [useProvideValidate, _useValidate] = createInjectionState(<Data>() => {
-  const watchTargets = inject(VERIFIC_WATCH_TARGETS_KEY, [] as (Ref<any> | ComputedRef<any>)[])
-
+const [createValidationScope, _useValidate] = createInjectionState(<Data>() => {
   const showingErrorsTriggerCount = ref(0)
   const errors = ref({}) as Ref<Record<string, ZodFormattedError<Data>>>
   const validations = ref({}) as Ref<Record<string, { schema: MaybeRef<z.Schema<Data>>, data: Record<keyof Data, Ref<any>> }>>
   const fieldErrors: Ref<Record<string, Ref<string[]>>> = ref({}) // Used to catch any field errors
 
   const hasFieldErrors = computed(() => Object.values(fieldErrors.value).some(error => !!error.value?.length))
-
-  watch(() => [...watchTargets], () => {
-    validationCheck()
-  }, { deep: true })
 
   whenever(() => showingErrorsTriggerCount.value, validationCheck)
 
@@ -129,4 +122,4 @@ function useValidate<Data>(schema?: MaybeRef<ZodType<Data>>, data?: Record<keyof
   return { ...validateStore, errors }
 }
 
-export { useProvideValidate, useValidate }
+export { createValidationScope, useValidate }
