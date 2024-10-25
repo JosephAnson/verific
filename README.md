@@ -43,11 +43,11 @@ Painless Vue forms
 You can install Verific using your preferred package manager. Below are the commands for npm, yarn, pnpm, and bun.
 
 ```bash [npm]
-npm add verific
+npm add @verific/core
 ```
 
 ```bash [pnpm]
-pnpm add verific
+pnpm add @verific/core
 ```
 
 ### Setting Up
@@ -57,7 +57,7 @@ pnpm add verific
 After installing Verific, you can import it into your project.
 
 ```typescript
-import { createVerific } from 'verific'
+import { createVerific } from '@verific/core'
 import { createApp } from 'vue'
 import App from './App.vue'
 
@@ -92,7 +92,7 @@ Next, create a Vue component that uses Verific to validate the form.
 
 ```vue
 <script setup>
-import { useError, useValidate } from 'verific'
+import { createValidationScope, useError, useValidate } from '@verific/core'
 import { ref } from 'vue'
 import { userSchema } from './schemas' // Assuming the schema is in a separate file
 
@@ -102,7 +102,8 @@ const form = ref({
   age: null,
 })
 
-const { errors, validate } = useValidate(userSchema, form)
+const { validate } = createValidationScope()
+const { errors } = useValidate(userSchema, form)
 
 function handleSubmit() {
   const result = validate()

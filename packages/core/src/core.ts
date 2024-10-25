@@ -2,7 +2,8 @@ import type { UnionToIntersection } from 'type-fest'
 import type { ComputedRef, MaybeRef, Ref } from 'vue'
 import type { z, ZodType } from 'zod'
 import { createInjectionState, tryOnScopeDispose, whenever } from '@vueuse/core'
-import { computed, ref, unref, watch } from 'vue'
+import { computed, inject, ref, unref, watch } from 'vue'
+import { VERIFIC_SYMBOL } from './utils/constants'
 
 type recursiveZodFormattedError<T> = T extends [any, ...any[]] ? {
   [K in keyof T]?: ZodFormattedError<T[K]>;
@@ -15,7 +16,15 @@ type recursiveZodFormattedError<T> = T extends [any, ...any[]] ? {
 type ZodFormattedError<T, U = string> = {
   _errors: U[]
 } & UnionToIntersection<recursiveZodFormattedError<NonNullable<T>>>
+
 const [createValidationScope, _useValidate] = createInjectionState(<Data>() => {
+  const rootVerific = inject(VERIFIC_SYMBOL)
+  if (!rootVerific) {
+    throw new Error(
+      'Please call app.useVerific() to initialise Verific',
+    )
+  }
+
   const showingErrorsTriggerCount = ref(0)
   const errors = ref({}) as Ref<Record<string, ZodFormattedError<Data>>>
   const validations = ref({}) as Ref<Record<string, { schema: MaybeRef<z.Schema<Data>>, data: Record<keyof Data, Ref<any>> }>>
@@ -46,7 +55,9 @@ const [createValidationScope, _useValidate] = createInjectionState(<Data>() => {
         .filter(([_, value]) => value && !value.success)
         .map(([key, value]) => [
           key,
-          (value as z.SafeParseError<any>).error.format(issue => issue.code === 'custom' ? issue.message : issue.code),
+          rootVerific?.options.useKeysOverStrings
+            ? (value as z.SafeParseError<any>).error.format(issue => issue.code === 'custom' ? issue.message : issue.code)
+            : (value as z.SafeParseError<any>).error.format(issue => issue.message),
         ]),
     ) as Record<string, ZodFormattedError<Data>>
 

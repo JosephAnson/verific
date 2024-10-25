@@ -58,7 +58,7 @@ Next, use Verific to validate your form data before sending it to the API.
 
 ```vue
 <script setup>
-import { useValidate } from 'verific'
+import { createValidationScope, useValidate } from '@verific/core'
 import { ref } from 'vue'
 import { userSchema, UserSchema } from './schemas/userSchema'
 import { registerUser } from './services/apiService'
@@ -68,7 +68,8 @@ const emit = defineEmits(['update:name', 'update:email', 'update:password'])
 const { name, email, password } = useVModels(props, emit)
 
 // Validate the form data using the schema and reactive prop
-const { validate, errors } = useValidate(userSchema, { name, email, password })
+const { validate } = createValidationScope()
+const { errors } = useValidate(userSchema, { name, email, password })
 
 async function handleSubmit() {
   const result = validate()

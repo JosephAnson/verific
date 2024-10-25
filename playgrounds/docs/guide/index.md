@@ -34,22 +34,6 @@ bun add @verific/core
 
 ## Setting Up
 
-### Importing Verific
-
-After installing Verific, you can import it into your project.
-
-```typescript
-import { createVerific } from '@verific/core'
-import { createApp } from 'vue'
-import App from './App.vue'
-
-const app = createApp(App)
-const verific = createVerific()
-
-app.use(verific)
-app.mount('#app')
-```
-
 ## Creating a Form
 
 Now that you have Verific set up, let's create a simple form to validate.
@@ -74,7 +58,7 @@ Next, create a Vue component that uses Verific to validate the form.
 
 ```vue
 <script setup>
-import { useError, useValidate } from 'verific'
+import { createValidationScope, useError, useValidate } from '@verific/core'
 import { ref } from 'vue'
 import { userSchema } from './schemas' // Assuming the schema is in a separate file
 
@@ -84,7 +68,8 @@ const form = ref({
   age: null,
 })
 
-const { errors, validate } = useValidate(userSchema, form)
+const { validate } = createValidationScope()
+const { errors } = useValidate(userSchema, form)
 
 function handleSubmit() {
   const result = validate()

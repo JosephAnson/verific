@@ -7,7 +7,9 @@ import router from './router'
 import './assets/main.css'
 
 const app = createApp(App)
-const verific = createVerific()
+const verific = createVerific({
+  useKeysOverStrings: false,
+})
 
 app.use(router)
 app.use(verific)

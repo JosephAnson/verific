@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ErrorMessages, useError, useProvideValidate, useValidate } from '@verific/core'
+import { createValidationScope, ErrorMessages, useError, useValidate } from '@verific/core'
 import { ref } from 'vue'
 import { z } from 'zod'
 
@@ -11,9 +11,8 @@ const schema = z.object({
 const email = ref('')
 const password = ref('')
 
-useProvideValidate()
-
-const { validate, errors } = useValidate(schema, {
+const { validate } = createValidationScope()
+const { errors } = useValidate(schema, {
   email,
   password,
 })

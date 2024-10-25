@@ -10,7 +10,8 @@ const Components = [
 ]
 
 const CoreConcepts = [
-  { text: 'Service Layer to Validation', link: '/guide/service-layer-to-validation' },
+  { text: 'Service Layer to Validation', link: '/guide/core/service-layer-to-validation' },
+  { text: 'Nested Validation', link: '/guide/core/nested-validation' },
 ]
 
 const Integrations = [
@@ -29,7 +30,7 @@ export default defineConfig({
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Introduction', link: '/guide/why' },
-      { text: 'Playground', link: 'https://stackblitz.com/edit/vaxee-playground?file=src%2FApp.vue' },
+      // { text: 'Playground', link: 'https://stackblitz.com/edit/verific-playground' },
     ],
 
     sidebar: [

@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://verific.josephanson.com" target="_blank">
-    <img src="https://raw.githubusercontent.com/josephanson/verific/main/logo.png" width="200" title="Go to website">
+    <img src="https://verific.josephanson.com/logo.png" width="200" title="Go to website">
   </a>
 </p>
 
@@ -18,160 +18,126 @@ Painless Vue forms
   <img src="https://img.shields.io/npm/dm/verific.svg?color=05bd6d&label=">
 </a>
 
-<a href="https://verific.josephanson.com/v4/" target="_blank">
+<a href="https://verific.josephanson.com/" target="_blank">
   <img src="https://img.shields.io/badge/-docs%20and%20demos-009f53">
 </a>
 
-<a href="https://github.com/sponsors/josephanson">
-  <img src="https://img.shields.io/badge/-%E2%99%A5%20Sponsors-ec5cc6">
-
-</a>
-
-</p>
-
-<br>
-
-<p align="center">
-  <a href="https://github.com/sponsors/josephanson">
-    <img src='https://sponsors.josephanson.com/sponsors.svg'>
-  </a>
 </p>
 
 <br>
 
 ## Features
 
-- **🍞 Easy:** Declarative validation that is familiar and easy to setup
-- **🧘‍♀️ Flexible:** Synchronous, Asynchronous, field-level or form-level validation
-- **⚡️ Fast:** Build faster forms faster with intuitive API and small footprint
-- **🏏 Minimal:** Only handles the complicated form concerns, gives you full control over everything else
-- **😎 UI Agnostic:** Works with native HTML elements or your favorite UI library components
-- **🦾 Progressive:** Works whether you use Vue.js as a progressive enhancement or in a complex setup
-- **✅ Built-in Rules:** Companion lib with 25+ Rules that covers most needs in most web applications
-- **🌐 i18n:** 45+ locales for built-in rules contributed by developers from all over the world
+- 🧩 Model-based validation
+- 🔗 Seamless integration with Vue 3
+- ⚙️ Customizable validation rules
+- ❌ Error handling
+- 🛠️ Service layer integration
 
 ## Getting Started
 
 ### Installation
 
-```sh
-# Install with yarn
-yarn add verific
+#### For Vue 3 Projects
 
-# Install with npm
-npm install verific --save
+You can install Verific using your preferred package manager. Below are the commands for npm, yarn, pnpm, and bun.
+
+```bash [npm]
+npm add @verific/core
 ```
 
-### Vue version support
+```bash [pnpm]
+pnpm add @verific/core
+```
 
-The main v4 version supports Vue 3.x only, for previous versions of Vue, check the following the table
+### Setting Up
 
-| vue Version | verific version | Documentation Link                                                                       |
-| ----------- | -------------------- | ---------------------------------------------------------------------------------------- |
-| `2.x`       | `2.x` or `3.x`       | [v2](https://verific.josephanson.com/v2) or [v3](https://verific.josephanson.com/v3) |
-| `3.x`       | `4.x`                | [v4](https://verific.josephanson.com/v4)                                               |
+#### Importing Verific
 
-### Usage
+After installing Verific, you can import it into your project.
 
-verific offers two styles to integrate form validation into your Vue.js apps.
+```typescript
+import { createVerific } from '@verific/core'
+import { createApp } from 'vue'
+import App from './App.vue'
 
-#### Composition API
+const app = createApp(App)
+const verific = createVerific()
 
-The fastest way to create a form and manage its validation, behavior, and values is with the composition API.
+app.use(verific)
+app.mount('#app')
+```
 
-Create your form with `useForm` and then use `defineField` to create your field model and props/attributes and `handleSubmit` to use the values and send them to an API.
+### Creating a Form
+
+Now that you have Verific set up, let's create a simple form to validate.
+
+#### Define a Zod Schema
+
+First, define a Zod schema that represents the data structure you want to validate.
+
+```typescript
+import { z } from 'zod'
+
+const userSchema = z.object({
+  name: z.string().min(3),
+  email: z.string().email(),
+  age: z.number().min(18),
+})
+```
+
+#### Create a Form Component
+
+Next, create a Vue component that uses Verific to validate the form.
 
 ```vue
 <script setup>
-import { useForm } from 'verific'
+import { createValidationScope, useError, useValidate } from '@verific/core'
+import { ref } from 'vue'
+import { userSchema } from './schemas' // Assuming the schema is in a separate file
 
-// Validation, or use `yup` or `zod`
-function required(value) {
-  return value ? true : 'This field is required'
+const form = ref({
+  name: '',
+  email: '',
+  age: null,
+})
+
+const { validate } = createValidationScope()
+const { errors } = useValidate(userSchema, form)
+
+function handleSubmit() {
+  const result = validate()
+  if (result.success) {
+    // Handle successful form submission
+  }
 }
-
-// Create the form
-const { defineField, handleSubmit, errors } = useForm({
-  validationSchema: {
-    field: required,
-  },
-})
-
-// Define fields
-const [field, fieldProps] = defineField('field')
-
-// Submit handler
-const onSubmit = handleSubmit((values) => {
-  // Submit to API
-  console.log(values)
-})
 </script>
 
 <template>
-  <form @submit="onSubmit">
-    <input v-model="field" v-bind="fieldProps">
-    <span>{{ errors.field }}</span>
+  <form @submit.prevent="handleSubmit">
+    <input v-model="form.name" type="text" placeholder="Name">
+    <span v-if="useError(errors.name, 'too_small')">Name must be at least 3 characters long.</span>
 
-    <button>Submit</button>
+    <input v-model="form.email" type="email" placeholder="Email">
+    <span v-if="useError(errors.email, 'invalid_type')">Please enter a valid email address.</span>
+
+    <input v-model="form.age" type="number" placeholder="Age">
+    <span v-if="useError(errors.age, 'too_small')">You must be at least 18 years old.</span>
+
+    <button type="submit">
+      Submit
+    </button>
   </form>
 </template>
 ```
 
-You can do so much more than this, for more info [check the composition API documentation](https://verific.josephanson.com/v4/guide/composition-api/getting-started/).
-
-#### Declarative Components
-
-Higher-order components can also be used to build forms. Register the `Field` and `Form` components and create a simple `required` validator:
-
-```vue
-<script setup>
-import { Field, Form } from 'verific'
-
-// Validation, or use `yup` or `zod`
-function required(value) {
-  return value ? true : 'This field is required'
-}
-
-// Submit handler
-function onSubmit(values) {
-  // Submit to API
-  console.log(values)
-}
-</script>
-
-<template>
-  <Form v-slot="{ errors }" @submit="onSubmit">
-    <Field name="field" :rules="required" />
-
-    <span>{{ errors.field }}</span>
-
-    <button>Submit</button>
-  </Form>
-</template>
-```
-
-The `Field` component renders an `input` of type `text` by default but you can [control that](https://verific.josephanson.com/v4/api/field#rendering-fields)
-
 ## 📚 Documentation
 
-Read the [documentation and demos](https://verific.josephanson.com/v4).
+Read the [documentation and demos](https://verific.josephanson.com/).
 
 ## Contributing
 
 You are welcome to contribute to this project, but before you do, please make sure you read the [contribution guide](/CONTRIBUTING.md).
-
-## Credits
-
-- Inspired by Laravel's [validation syntax](https://laravel.com/docs/5.4/validation)
-- v4 API Inspired by [Formik's](https://github.com/formium/formik)
-- Nested path types by [react-hook-form](https://github.com/react-hook-form/react-hook-form)
-- Logo by [Baianat](https://github.com/baianat)
-
-## Emeriti
-
-Here we honor past contributors and sponsors who have been a major part on this project.
-
-- [Baianat](https://github.com/baianat).
 
 ## ⚖️ License
 

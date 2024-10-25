@@ -3,7 +3,7 @@ import { createValidationScope } from '@verific/core'
 import Form2NestedComponent1 from '../components/Form2NestedComponent1.vue'
 import Form2NestedComponent2 from '../components/Form2NestedComponent2.vue'
 
-const { validate } = createValidationScope()
+const { validate, errors } = createValidationScope()
 
 async function onSubmit(event: Event) {
   event.preventDefault()
@@ -24,7 +24,7 @@ async function onSubmit(event: Event) {
     <form class="space-y-4" @submit="onSubmit">
       <Form2NestedComponent1 />
       <Form2NestedComponent2 />
-      <button type="submit">
+      <button type="submit" :disabled="!errors">
         Submit
       </button>
     </form>
