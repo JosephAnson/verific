@@ -2,7 +2,6 @@
   "name": "verific",
   "type": "module",
   "version": "0.1.0",
-  "private": true,
   "packageManager": "pnpm@9.12.1",
   "description": "Vue Validation Library",
   "author": "Joseph Anson <https://github.com/josephanson>",
@@ -20,7 +19,6 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "pnpm tsc --noEmit --project ./tsconfig.json --skipLibCheck",
     "dev": "cd ./playgrounds/docs && pnpm dev",
-    "publish:ci": "esno scripts/publish.ts",
     "release": "bumpp"
   },
   "peerDependencies": {

@@ -10,12 +10,12 @@ Painless Vue forms
 
 <p align="center">
 
-<a target="_blank" href="https://www.npmjs.com/package/verific">
-  <img src="https://img.shields.io/npm/v/verific.svg?label=&color=05bda8">
+<a target="_blank" href="https://www.npmjs.com/package/@verific/core">
+  <img src="https://img.shields.io/npm/v/@verific/core.svg?label=&color=05bda8">
 </a>
 
-<a target="_blank" href="https://npm-stat.com/charts.html?package=verific">
-  <img src="https://img.shields.io/npm/dm/verific.svg?color=05bd6d&label=">
+<a target="_blank" href="https://npm-stat.com/charts.html?package=@verific/core">
+  <img src="https://img.shields.io/npm/dm/@verific/core.svg?color=05bd6d&label=">
 </a>
 
 <a href="https://verific.josephanson.com/" target="_blank">
