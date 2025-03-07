@@ -1,5 +1,6 @@
 {
-  "name": "@verific/core",
+  "name": "@verific/nuxt",
+  "type": "module",
   "version": "0.0.2",
   "description": "Vue Validation Library",
   "author": "Joseph Anson <https://github.com/antf>",
@@ -8,7 +9,7 @@
   "repository": {
     "url": "git+https://github.com/josephanson/verific.git",
     "type": "git",
-    "directory": "packages/verific"
+    "directory": "packages/nuxt"
   },
   "bugs": {
     "url": "https://github.com/josephanson/verific/issues"
@@ -16,36 +17,47 @@
   "keywords": [
     "VueJS",
     "Vue",
+    "Nuxt",
+    "NuxtJS",
     "validation",
     "validator",
     "inputs",
     "form"
   ],
   "sideEffects": false,
-  "main": "dist/main.js",
-  "module": "dist/main.mjs",
-  "types": "dist/main.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/module.d.ts",
+      "import": "./dist/module.mjs",
+      "require": "./dist/module.cjs"
+    }
+  },
+  "main": "./dist/module.cjs",
+  "module": "./dist/module.mjs",
+  "types": "./dist/types.d.ts",
   "files": [
-    "dist/*.d.ts",
-    "dist/*.js"
+    "dist"
   ],
   "scripts": {
-    "build": "tsup src/main.ts --format cjs,esm --dts",
-    "dev": "npm run build -- --watch",
+    "build": "nuxt-module-build",
+    "dev": "nuxt-module-build --stub && nuxt-module-build --watch",
     "test": "vitest",
     "release": "npx changelogen@latest --release",
     "publish": "pnpm publish"
   },
   "peerDependencies": {
+    "nuxt": "^3.0.0",
     "vue": "^3.4.26"
   },
   "dependencies": {
-    "@standard-schema/spec": "^1.0.0",
-    "@vue/devtools-api": "^7.4.6",
-    "@vueuse/core": "^11.1.0",
-    "type-fest": "^4.26.1"
+    "@nuxt/kit": "^3.10.3",
+    "@verific/core": "workspace:*",
+    "defu": "^6.1.4"
   },
   "devDependencies": {
+    "@nuxt/module-builder": "^0.5.5",
+    "@nuxt/schema": "^3.10.3",
+    "nuxt": "^3.10.3",
     "tsup": "^8.3.0"
   },
   "publishConfig": {

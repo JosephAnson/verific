@@ -1,4 +1,5 @@
-import { type MaybeRef, unref } from 'vue'
+import type { MaybeRef } from 'vue'
+import { unref } from 'vue'
 
 export type Messages = string | Messages[] | Record<string, boolean> | false
 

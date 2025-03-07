@@ -1,4 +1,5 @@
-import { type App, markRaw } from 'vue'
+import type { App } from 'vue'
+import { markRaw } from 'vue'
 import { VERIFIC_SYMBOL } from './utils/constants'
 
 declare module 'vue' {
