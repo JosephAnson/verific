@@ -142,3 +142,215 @@ You are welcome to contribute to this project, but before you do, please make su
 ## ⚖️ License
 
 Released under [MIT](/LICENSE) by [@josephanson](https://github.com/josephanson).
+
+# Verific
+
+Vue Validation Library based on Standard Schema
+
+## Overview
+
+Verific is a Vue validation library that works with any validation library that implements the [Standard Schema](https://github.com/standard-schema/standard-schema) interface, such as:
+
+- [Zod](https://github.com/colinhacks/zod)
+- [Valibot](https://github.com/fabian-hiller/valibot)
+- [ArkType](https://github.com/arktypeio/arktype)
+
+## Installation
+
+```bash
+# npm
+npm install @verific/core
+
+# yarn
+yarn add @verific/core
+
+# pnpm
+pnpm add @verific/core
+```
+
+## Setup
+
+```ts
+// main.ts
+import { createApp } from 'vue'
+import { createVerific } from '@verific/core'
+import App from './App.vue'
+
+const app = createApp(App)
+
+// Initialize Verific
+app.use(createVerific({
+  // Options
+}))
+
+app.mount('#app')
+```
+
+## Usage with Zod
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+import { createValidationScope, useValidate } from '@verific/core'
+import { z } from 'zod'
+
+// Create a validation scope
+const { showErrors } = createValidationScope()
+
+// Define your form data
+const email = ref('')
+const password = ref('')
+
+// Define your schema
+const schema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+})
+
+// Use validation
+const { errors } = useValidate(schema, {
+  email,
+  password,
+})
+
+// Handle form submission
+function onSubmit() {
+  showErrors()
+  // Handle form submission if no errors
+}
+</script>
+
+<template>
+  <form @submit.prevent="onSubmit">
+    <div>
+      <label for="email">Email</label>
+      <input id="email" v-model="email" type="email" />
+      <div v-if="errors?.issues">
+        {{ errors.issues.find(issue => issue.path?.[0] === 'email')?.message }}
+      </div>
+    </div>
+    
+    <div>
+      <label for="password">Password</label>
+      <input id="password" v-model="password" type="password" />
+      <div v-if="errors?.issues">
+        {{ errors.issues.find(issue => issue.path?.[0] === 'password')?.message }}
+      </div>
+    </div>
+    
+    <button type="submit">Submit</button>
+  </form>
+</template>
+```
+
+## Usage with Valibot
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+import { createValidationScope, useValidate } from '@verific/core'
+import { object, string, email, minLength } from 'valibot'
+
+// Create a validation scope
+const { showErrors } = createValidationScope()
+
+// Define your form data
+const email = ref('')
+const password = ref('')
+
+// Define your schema
+const schema = object({
+  email: string([email()]),
+  password: string([minLength(8)]),
+})
+
+// Use validation
+const { errors } = useValidate(schema, {
+  email,
+  password,
+})
+
+// Handle form submission
+function onSubmit() {
+  showErrors()
+  // Handle form submission if no errors
+}
+</script>
+
+<template>
+  <!-- Same template as above -->
+</template>
+```
+
+## Usage with ArkType
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+import { createValidationScope, useValidate } from '@verific/core'
+import { type } from 'arktype'
+
+// Create a validation scope
+const { showErrors } = createValidationScope()
+
+// Define your form data
+const email = ref('')
+const password = ref('')
+
+// Define your schema
+const schema = type({
+  email: 'string:email',
+  password: 'string:min(8)',
+})
+
+// Use validation
+const { errors } = useValidate(schema, {
+  email,
+  password,
+})
+
+// Handle form submission
+function onSubmit() {
+  showErrors()
+  // Handle form submission if no errors
+}
+</script>
+
+<template>
+  <!-- Same template as above -->
+</template>
+```
+
+## API Reference
+
+### createVerific(options)
+
+Creates a Verific instance to be used by the application.
+
+```ts
+interface VerificOptions {
+  useKeysOverStrings?: boolean
+}
+```
+
+### createValidationScope()
+
+Creates a validation scope that can be used to validate forms.
+
+### useValidate(schema, data)
+
+Validates data against a schema.
+
+- `schema`: A Standard Schema compliant validator
+- `data`: An object containing reactive references to form data
+
+### Utility Functions
+
+- `getErrorMessages(result)`: Extracts error messages from a Standard Schema failure result
+- `isStandardSchema(value)`: Checks if a value is a Standard Schema compliant validator
+- `unwrapSchema(schema)`: Unwraps a MaybeRef value and ensures it's a Standard Schema compliant validator
+- `validateWithStandardSchema(schema, data)`: Validates data using a Standard Schema compliant validator
+
+## License
+
+MIT

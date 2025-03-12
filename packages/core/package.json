@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@standard-schema/spec": "^1.0.0",
+    "@standard-schema/utils": "^0.3.0",
     "@vue/devtools-api": "^7.4.6",
     "@vueuse/core": "^11.1.0",
     "type-fest": "^4.26.1"

@@ -1,23 +1,11 @@
-import type { UnionToIntersection } from 'type-fest'
+import type { StandardSchemaV1 } from '@standard-schema/spec'
 import type { ComputedRef, MaybeRef, Ref } from 'vue'
-import type { z, ZodType } from 'zod'
 import { createInjectionState, tryOnScopeDispose, whenever } from '@vueuse/core'
 import { computed, inject, ref, unref, watch } from 'vue'
 import { VERIFIC_SYMBOL } from './utils/constants'
+import { unwrapSchema } from './utils/schemaUtils'
 
-type recursiveZodFormattedError<T> = T extends [any, ...any[]] ? {
-  [K in keyof T]?: ZodFormattedError<T[K]>;
-} : T extends any[] ? {
-  [k: number]: ZodFormattedError<T[number]>
-} : T extends object ? {
-  [K in keyof T]?: ZodFormattedError<T[K]> ;
-} : unknown
-
-type ZodFormattedError<T, U = string> = {
-  _errors: U[]
-} & UnionToIntersection<recursiveZodFormattedError<NonNullable<T>>>
-
-const [createValidationScope, _useValidate] = createInjectionState(<Data>() => {
+const [createValidationScope, _useValidate] = createInjectionState(<T extends StandardSchemaV1>() => {
   const rootVerific = inject(VERIFIC_SYMBOL)
   if (!rootVerific) {
     throw new Error(
@@ -26,8 +14,8 @@ const [createValidationScope, _useValidate] = createInjectionState(<Data>() => {
   }
 
   const showingErrorsTriggerCount = ref(0)
-  const errors = ref({}) as Ref<Record<string, ZodFormattedError<Data>>>
-  const validations = ref({}) as Ref<Record<string, { schema: MaybeRef<z.Schema<Data>>, data: Record<keyof Data, Ref<any>> }>>
+  const errors = ref({}) as Ref<Record<string, StandardSchemaV1.FailureResult>>
+  const validations = ref({}) as Ref<Record<string, { schema: MaybeRef<StandardSchemaV1>, data: Record<keyof StandardSchemaV1.InferInput<T>, Ref<any>> }>>
   const fieldErrors: Ref<Record<string, Ref<string[]>>> = ref({}) // Used to catch any field errors
 
   const hasFieldErrors = computed(() => Object.values(fieldErrors.value).some(error => !!error.value?.length))
@@ -45,21 +33,21 @@ const [createValidationScope, _useValidate] = createInjectionState(<Data>() => {
         const plainData = Object.fromEntries(
           Object.entries(validation.data).map(([dataKey, dataValue]) => [dataKey, unref(dataValue)]),
         )
-        return [key, unref(validation.schema).safeParse(plainData)]
+        // Use the standard schema validate method with the unwrapped schema
+        const schema = unwrapSchema(validation.schema)
+        return [key, schema['~standard'].validate(plainData)]
       }),
     )
 
     // Extract and format the errors from the parsed results
     const validationErrors = Object.fromEntries(
       Object.entries(parsedResults)
-        .filter(([_, value]) => value && !value.success)
+        .filter(([_, value]) => value && 'issues' in value)
         .map(([key, value]) => [
           key,
-          rootVerific?.options.useKeysOverStrings
-            ? (value as z.SafeParseError<any>).error.format(issue => issue.code === 'custom' ? issue.message : issue.code)
-            : (value as z.SafeParseError<any>).error.format(issue => issue.message),
+          { issues: (value as StandardSchemaV1.FailureResult).issues },
         ]),
-    ) as Record<string, ZodFormattedError<Data>>
+    ) as Record<string, StandardSchemaV1.FailureResult>
 
     // Update the reactive errors object
     errors.value = validationErrors
@@ -73,7 +61,7 @@ const [createValidationScope, _useValidate] = createInjectionState(<Data>() => {
     }
   }
 
-  function addValidation(key: string, schema: MaybeRef<z.Schema<Data>>, data: Record<keyof Data, Ref<any>>) {
+  function addValidation<T extends StandardSchemaV1>(key: string, schema: MaybeRef<StandardSchemaV1>, data: Record<keyof StandardSchemaV1.InferInput<T>, Ref<any>>) {
     validations.value[key] = { schema, data }
   }
 
@@ -90,6 +78,8 @@ const [createValidationScope, _useValidate] = createInjectionState(<Data>() => {
     watch(() => showingErrorsTriggerCount.value, validateCalled)
   }
 
+ 
+
   return {
     errors,
     fieldErrors,
@@ -105,7 +95,7 @@ const [createValidationScope, _useValidate] = createInjectionState(<Data>() => {
 
 let counter = 0
 
-function useValidate<Data>(schema?: MaybeRef<ZodType<Data>>, data?: Record<keyof Data, Ref<any>>) {
+function useValidate<T extends StandardSchemaV1>(schema?: MaybeRef<T>, data?: Record<keyof StandardSchemaV1.InferInput<T>, Ref<any>>) {
   const id = `${counter++}`
   const validateStore = _useValidate()
   if (validateStore == null) {
@@ -124,13 +114,13 @@ function useValidate<Data>(schema?: MaybeRef<ZodType<Data>>, data?: Record<keyof
     }
 
     return validateStore.errors.value[id]
-  }) as ComputedRef<ZodFormattedError<Data>>
+  }) as ComputedRef<StandardSchemaV1.FailureResult>
 
   tryOnScopeDispose(() => {
     validateStore.removeValidation(id)
   })
 
-  return { ...validateStore, errors }
+  return { ...validateStore, errors, getTypes }
 }
 
 export { createValidationScope, useValidate }

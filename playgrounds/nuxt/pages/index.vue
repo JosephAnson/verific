@@ -23,6 +23,9 @@ const { errors } = useValidate(validationSchema, {
   confirmPassword,
 })
 
+console.log(validationSchema)
+
+
 async function onSubmit(event: Event) {
   event.preventDefault()
   const result = await validate()
@@ -39,6 +42,7 @@ async function onSubmit(event: Event) {
 </script>
 
 <template>
+  {{ types }}
   <UContainer class="p-20">
     <h1 class="text-2xl font-bold mb-6">
       Zod Validation Example

@@ -15,6 +15,11 @@
             Valibot Example
           </NuxtLink>
         </li>
+        <li>
+          <NuxtLink to="/standard-schema" class="hover:text-gray-300" active-class="text-blue-400">
+            Standard Schema
+          </NuxtLink>
+        </li>
       </ul>
     </div>
   </nav>
