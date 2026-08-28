@@ -826,7 +826,7 @@ async function request(url, server, readOutput, init) {
 
 async function runPackageManager(arguments_, cwd) {
   if (packageManager) {
-    await run(process.execPath, [packageManager, ...arguments_], cwd)
+    await run(packageManager, arguments_, cwd)
     return
   }
   await run('corepack', ['pnpm', ...arguments_], cwd)
