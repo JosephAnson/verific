@@ -1,4 +1,5 @@
 import type { App } from 'vue'
+import type { IssueNormaliser, MessageResolver } from './messages'
 import { markRaw } from 'vue'
 import { VERIFIC_SYMBOL } from './utils/constants'
 
@@ -8,29 +9,23 @@ declare module 'vue' {
   }
 }
 
-/**
- * Every application must own its own verific to be able to create stores
- */
-export interface Verific {
-  install: (app: App) => void
-  options: VerificOptions
-}
-
 export interface VerificOptions {
-  useKeysOverStrings?: boolean
+  readonly messages?: MessageResolver
+  readonly describeIssue?: IssueNormaliser
 }
 
-/**
- * Creates a Verific instance to be used by the application
- */
-export function createVerific(options: VerificOptions): Verific {
+export interface Verific {
+  readonly options: Readonly<VerificOptions>
+  install: (app: App) => void
+}
+
+export function createVerific(options: VerificOptions = {}): Verific {
   const verific: Verific = markRaw({
+    options: Object.freeze({ ...options }),
     install: (app: App) => {
       app.provide(VERIFIC_SYMBOL, verific)
       app.config.globalProperties.$verific = verific
     },
-    options,
   })
-
   return verific
 }

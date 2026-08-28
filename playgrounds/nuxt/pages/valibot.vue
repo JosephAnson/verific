@@ -1,119 +1,97 @@
 <script setup lang="ts">
-import { createValidationScope, ErrorMessages, useValidate } from '@verific/core'
+import { vueI18nMessages } from '@verific/vue-i18n'
 import * as v from 'valibot'
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
-// Create a valibot schema
-const valibotSchema = v.object({
-  name: v.pipe(v.string(), v.minLength(2, 'Name must be at least 2 characters'), v.maxLength(50, 'Name is too long')),
-  email: v.pipe(v.string(), v.email('Please enter a valid email address')),
+const schema = v.object({
+  name: v.pipe(v.string(), v.minLength(2, 'Name must be at least 2 characters')),
+  email: v.pipe(v.string(), v.email('Enter a valid email address')),
   age: v.pipe(v.number(), v.minValue(18, 'You must be at least 18 years old')),
-  website: v.optional(v.pipe(v.string(), v.url('Please enter a valid URL'))),
+  website: v.optional(v.pipe(v.string(), v.url('Enter a valid URL'))),
 })
 
-// Create refs for form fields
 const name = ref('')
 const email = ref('')
-const age = ref<number | null>(null)
-const website = ref('')
+const age = ref<number | undefined>()
+const website = ref<string | undefined>()
 
-// Set up validation
-const { validate } = createValidationScope()
-const { errors } = useValidate(valibotSchema, {
+const composer = useI18n({
+  useScope: 'local',
+  messages: {
+    en: { forms: { profile: { name: { minLength: 'Tell us your full name' } } } },
+    es: { forms: { profile: { name: { minLength: 'Escribe tu nombre completo' } } } },
+  },
+})
+composer.fallbackRoot = false
+
+const { errorFor, errorsFor, validate } = useValidation(schema, {
   name,
   email,
   age,
   website,
+}, {
+  messagePrefix: 'forms.profile',
+  messages: vueI18nMessages(composer),
 })
 
-async function onSubmit(event: Event) {
-  event.preventDefault()
+async function onSubmit() {
   const result = await validate()
   if (!result.success) {
     return
   }
+
   // eslint-disable-next-line no-console
-  console.log({
-    title: 'Success',
-    description: 'The form has been submitted.',
-    data: { name: name.value, email: email.value, age: age.value, website: website.value },
-  })
+  console.log('Form submitted', { name: name.value, email: email.value })
 }
 </script>
 
 <template>
   <UContainer class="p-20">
     <h1 class="text-2xl font-bold mb-6">
-      Valibot Validation Example
+      Valibot validation
     </h1>
 
-    <form class="space-y-4" @submit="onSubmit">
-      <UFormGroup
-        label="Name"
-        name="name"
-        :error="!!errors.name?._errors?.length"
-      >
-        <UInput v-model="name" type="text" />
-        <div class="space-y-1 mt-2">
-          <ErrorMessages
-            :messages="errors.name?._errors?.reduce((acc, msg) => ({ ...acc, [msg]: true }), {}) || {}"
-            class="w-full text-sm block text-red-400"
-          />
-        </div>
-      </UFormGroup>
+    <form class="space-y-4" @submit.prevent="onSubmit">
+      <UFormField label="Name" name="name" :error="errorFor('name')">
+        <UInput v-model="name" />
+        <template #error>
+          <p v-for="(error, index) in errorsFor('name')" :key="`${index}:${error}`">
+            {{ error }}
+          </p>
+        </template>
+      </UFormField>
 
-      <UFormGroup
-        label="Email"
-        name="email"
-        :error="!!errors.email?._errors?.length"
-      >
+      <UFormField label="Email" name="email" :error="errorFor('email')">
         <UInput v-model="email" type="email" />
-        <div class="space-y-1 mt-2">
-          <ErrorMessages
-            :messages="errors.email?._errors?.reduce((acc, msg) => ({ ...acc, [msg]: true }), {}) || {}"
-            class="w-full text-sm block text-red-400"
-          />
-        </div>
-      </UFormGroup>
+        <template #error>
+          <p v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
+            {{ error }}
+          </p>
+        </template>
+      </UFormField>
 
-      <UFormGroup
-        label="Age"
-        name="age"
-        :error="!!errors.age?._errors?.length"
-      >
+      <UFormField label="Age" name="age" :error="errorFor('age')">
         <UInput v-model="age" type="number" />
-        <div class="space-y-1 mt-2">
-          <ErrorMessages
-            :messages="errors.age?._errors?.reduce((acc, msg) => ({ ...acc, [msg]: true }), {}) || {}"
-            class="w-full text-sm block text-red-400"
-          />
-        </div>
-      </UFormGroup>
+        <template #error>
+          <p v-for="(error, index) in errorsFor('age')" :key="`${index}:${error}`">
+            {{ error }}
+          </p>
+        </template>
+      </UFormField>
 
-      <UFormGroup
-        label="Website (optional)"
-        name="website"
-        :error="!!errors.website?._errors?.length"
-      >
+      <UFormField label="Website" name="website" :error="errorFor('website')">
         <UInput v-model="website" type="url" />
-        <div class="space-y-1 mt-2">
-          <ErrorMessages
-            :messages="errors.website?._errors?.reduce((acc, msg) => ({ ...acc, [msg]: true }), {}) || {}"
-            class="w-full text-sm block text-red-400"
-          />
-        </div>
-      </UFormGroup>
+        <template #error>
+          <p v-for="(error, index) in errorsFor('website')" :key="`${index}:${error}`">
+            {{ error }}
+          </p>
+        </template>
+      </UFormField>
 
-      <UButton type="submit" class="mt-6">
+      <UButton type="submit">
         Submit
       </UButton>
     </form>
-
-    <div class="mt-8 p-4 bg-gray-900 rounded">
-      <h2 class="text-lg font-semibold mb-2">
-        Validation Errors:
-      </h2>
-      <pre class="text-sm">{{ errors }}</pre>
-    </div>
   </UContainer>
 </template>

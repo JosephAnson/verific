@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-08-28
+goal: Provide tested first-party localisation adapters and dedicated
+  documentation for Vue I18n, i18next and Paraglide while preserving a small
+  shared adapter seam.

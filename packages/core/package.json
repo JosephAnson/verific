@@ -1,14 +1,14 @@
 {
   "name": "@verific/core",
-  "version": "0.0.2",
+  "version": "0.1.1",
   "description": "Vue Validation Library",
-  "author": "Joseph Anson <https://github.com/antf>",
+  "author": "Joseph Anson <https://github.com/josephanson>",
   "license": "MIT",
   "homepage": "https://verific.josephanson.com/",
   "repository": {
     "url": "git+https://github.com/josephanson/verific.git",
     "type": "git",
-    "directory": "packages/verific"
+    "directory": "packages/core"
   },
   "bugs": {
     "url": "https://github.com/josephanson/verific/issues"
@@ -22,32 +22,36 @@
     "form"
   ],
   "sideEffects": false,
-  "main": "dist/main.js",
-  "module": "dist/main.mjs",
-  "types": "dist/main.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.mjs",
+      "require": "./dist/main.js"
+    }
+  },
+  "main": "./dist/main.js",
+  "module": "./dist/main.mjs",
+  "types": "./dist/main.d.ts",
   "files": [
-    "dist/*.d.ts",
-    "dist/*.js"
+    "dist"
   ],
   "scripts": {
-    "build": "tsup src/main.ts --format cjs,esm --dts",
+    "build": "tsup src/main.ts --format cjs,esm --dts --clean",
     "dev": "npm run build -- --watch",
-    "test": "vitest",
-    "release": "npx changelogen@latest --release",
-    "publish": "pnpm publish"
+    "test": "vitest run --root ../.. packages/core/tests",
+    "typecheck": "tsc --noEmit -p tsconfig.json --skipLibCheck",
+    "release": "pnpm exec changelogen --release",
+    "prepack": "pnpm build"
   },
   "peerDependencies": {
     "vue": "^3.4.26"
   },
   "dependencies": {
-    "@standard-schema/spec": "^1.0.0",
-    "@standard-schema/utils": "^0.3.0",
-    "@vue/devtools-api": "^7.4.6",
-    "@vueuse/core": "^11.1.0",
-    "type-fest": "^4.26.1"
+    "@standard-schema/spec": "^1.1.0"
   },
   "devDependencies": {
-    "tsup": "^8.3.0"
+    "tsup": "^8.5.1",
+    "vue": "^3.5.42"
   },
   "publishConfig": {
     "access": "public",

@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-08-28
+goal: Rewrite the Verific documentation so first-time users can understand the
+  model, complete a working Vue or Nuxt setup, and find precise guidance for
+  validation composition, errors, and localisation.

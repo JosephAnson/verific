@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { createValidationScope } from '@verific/core'
+import { useValidation } from '@verific/core'
 import Form2NestedComponent1 from '../components/Form2NestedComponent1.vue'
 import Form2NestedComponent2 from '../components/Form2NestedComponent2.vue'
 
-const { validate, errors } = createValidationScope()
+const { errors, isValidating, validate } = useValidation({ messagePrefix: 'forms.profile' })
 
 async function onSubmit(event: Event) {
   event.preventDefault()
@@ -24,9 +24,12 @@ async function onSubmit(event: Event) {
     <form class="space-y-4" @submit="onSubmit">
       <Form2NestedComponent1 />
       <Form2NestedComponent2 />
-      <button type="submit" :disabled="!errors">
+      <button type="submit" :disabled="isValidating">
         Submit
       </button>
+      <p v-if="errors.length">
+        Resolve {{ errors.length }} validation error(s).
+      </p>
     </form>
   </div>
 </template>

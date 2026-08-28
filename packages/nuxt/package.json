@@ -1,9 +1,9 @@
 {
   "name": "@verific/nuxt",
   "type": "module",
-  "version": "0.0.2",
+  "version": "0.1.1",
   "description": "Vue Validation Library",
-  "author": "Joseph Anson <https://github.com/antf>",
+  "author": "Joseph Anson <https://github.com/josephanson>",
   "license": "MIT",
   "homepage": "https://verific.josephanson.com/",
   "repository": {
@@ -27,38 +27,56 @@
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/module.d.ts",
+      "types": "./dist/types.d.mts",
       "import": "./dist/module.mjs",
-      "require": "./dist/module.cjs"
+      "default": "./dist/module.mjs"
     }
   },
-  "main": "./dist/module.cjs",
+  "main": "./dist/module.mjs",
   "module": "./dist/module.mjs",
-  "types": "./dist/types.d.ts",
+  "types": "./dist/types.d.mts",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "nuxt-module-build",
+    "build": "nuxt-module-build build",
     "dev": "nuxt-module-build --stub && nuxt-module-build --watch",
-    "test": "vitest",
-    "release": "npx changelogen@latest --release",
-    "publish": "pnpm publish"
+    "test": "vitest run tests",
+    "test:integration": "node tests/packed-consumer.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json --skipLibCheck",
+    "release": "pnpm exec changelogen --release",
+    "prepack": "pnpm build"
   },
   "peerDependencies": {
-    "nuxt": "^3.0.0",
-    "vue": "^3.4.26"
+    "@nuxtjs/i18n": ">=10.6 <11",
+    "@verific/core": "workspace:^",
+    "@verific/vue-i18n": "workspace:^",
+    "nuxt": ">=3.21 <5",
+    "vue": "^3.4.26",
+    "vue-i18n": ">=11.4 <12"
+  },
+  "peerDependenciesMeta": {
+    "@nuxtjs/i18n": {
+      "optional": true
+    },
+    "@verific/vue-i18n": {
+      "optional": true
+    },
+    "vue-i18n": {
+      "optional": true
+    }
   },
   "dependencies": {
-    "@nuxt/kit": "^3.10.3",
-    "@verific/core": "workspace:*",
-    "defu": "^6.1.4"
+    "@nuxt/kit": "^4.5.2"
   },
   "devDependencies": {
-    "@nuxt/module-builder": "^0.5.5",
-    "@nuxt/schema": "^3.10.3",
-    "nuxt": "^3.10.3",
-    "tsup": "^8.3.0"
+    "@nuxt/module-builder": "^1.0.3",
+    "@nuxt/schema": "^4.5.2",
+    "@verific/core": "workspace:*",
+    "@verific/vue-i18n": "workspace:*",
+    "nuxt": "^4.5.2",
+    "typescript": "^5.9.3",
+    "vue-i18n": "11.4.10"
   },
   "publishConfig": {
     "access": "public",

@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ErrorMessages, useError, useValidate } from '@verific/core'
+import { useValidation } from '@verific/core'
 import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
 import { ref } from 'vue'
 import { z } from 'zod'
 
@@ -11,7 +10,7 @@ const schema = z.object({
 
 const firstName = ref('')
 
-const { errors } = useValidate(schema, {
+const { errorsFor } = useValidation(schema, {
   firstName,
 })
 </script>
@@ -20,16 +19,12 @@ const { errors } = useValidate(schema, {
   <div class="container">
     <div class="flex-col flex">
       <label for="firstName">First Name</label>
-      <InputText id="firstName" v-model="firstName" type="password" />
-      <ErrorMessages
-        :as="Message"
-        severity="error"
-        :messages="{
-          ['This field is required']: useError(errors.firstName, 'too_small'),
-          ['Enter less than 8 characters']: useError(errors.firstName, 'too_big'),
-        }"
+      <InputText id="firstName" v-model="firstName" type="text" />
+      <span
+        v-for="(error, index) in errorsFor('firstName')"
+        :key="`${index}:${error}`"
         class="w-full text-sm block text-red-400"
-      />
+      >{{ error }}</span>
     </div>
   </div>
 </template>

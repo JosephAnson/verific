@@ -1,129 +1,58 @@
 <p align="center">
-  <a href="https://verific.josephanson.com" target="_blank">
-    <img src="https://verific.josephanson.com/logo.png" width="200" title="Go to website">
+  <a href="https://verific.josephanson.com">
+    <img src="https://verific.josephanson.com/logo.png" width="180" alt="Verific">
   </a>
 </p>
 
-<p align="center">
-Painless Vue forms
-</p>
+<p align="center">Model-based Standard Schema validation for Vue and Nuxt.</p>
 
-<p align="center">
+Verific validates application-owned models with Zod, Valibot or another
+[Standard Schema](https://standardschema.dev/) validator. It composes schemas
+across a component tree and exposes structured issues and ready-to-render error
+strings without introducing another validation-rule language.
 
-<a target="_blank" href="https://www.npmjs.com/package/@verific/core">
-  <img src="https://img.shields.io/npm/v/@verific/core.svg?label=&color=05bda8">
-</a>
+## Install
 
-<a target="_blank" href="https://npm-stat.com/charts.html?package=@verific/core">
-  <img src="https://img.shields.io/npm/dm/@verific/core.svg?color=05bd6d&label=">
-</a>
-
-<a href="https://verific.josephanson.com/" target="_blank">
-  <img src="https://img.shields.io/badge/-docs%20and%20demos-009f53">
-</a>
-
-</p>
-
-<br>
-
-## Features
-
-- 🧩 Model-based validation
-- 🔗 Seamless integration with Vue 3
-- ⚙️ Customizable validation rules
-- ❌ Error handling
-- 🛠️ Service layer integration
-
-## Getting Started
-
-### Installation
-
-#### For Vue 3 Projects
-
-You can install Verific using your preferred package manager. Below are the commands for npm, yarn, pnpm, and bun.
-
-```bash [npm]
-npm add @verific/core
+```bash
+pnpm add @verific/core zod
 ```
 
-```bash [pnpm]
-pnpm add @verific/core
-```
-
-### Setting Up
-
-#### Importing Verific
-
-After installing Verific, you can import it into your project.
-
-```typescript
-import { createVerific } from '@verific/core'
-import { createApp } from 'vue'
-import App from './App.vue'
-
-const app = createApp(App)
-const verific = createVerific()
-
-app.use(verific)
-app.mount('#app')
-```
-
-### Creating a Form
-
-Now that you have Verific set up, let's create a simple form to validate.
-
-#### Define a Zod Schema
-
-First, define a Zod schema that represents the data structure you want to validate.
-
-```typescript
-import { z } from 'zod'
-
-const userSchema = z.object({
-  name: z.string().min(3),
-  email: z.string().email(),
-  age: z.number().min(18),
-})
-```
-
-#### Create a Form Component
-
-Next, create a Vue component that uses Verific to validate the form.
+## Vue quick start
 
 ```vue
-<script setup>
-import { createValidationScope, useError, useValidate } from '@verific/core'
+<script setup lang="ts">
+import { useValidation } from '@verific/core'
 import { ref } from 'vue'
-import { userSchema } from './schemas' // Assuming the schema is in a separate file
+import { z } from 'zod'
 
-const form = ref({
-  name: '',
-  email: '',
-  age: null,
-})
+const email = ref('')
+const schema = z.object({ email: z.string().email() })
+const { errorsFor, hasError, validate, validateFor } = useValidation(schema, { email })
 
-const { validate } = createValidationScope()
-const { errors } = useValidate(userSchema, form)
-
-function handleSubmit() {
-  const result = validate()
+async function submit() {
+  const result = await validate()
   if (result.success) {
-    // Handle successful form submission
+    // Submit application-owned state.
   }
 }
 </script>
 
 <template>
-  <form @submit.prevent="handleSubmit">
-    <input v-model="form.name" type="text" placeholder="Name">
-    <span v-if="useError(errors.name, 'too_small')">Name must be at least 3 characters long.</span>
-
-    <input v-model="form.email" type="email" placeholder="Email">
-    <span v-if="useError(errors.email, 'invalid_type')">Please enter a valid email address.</span>
-
-    <input v-model="form.age" type="number" placeholder="Age">
-    <span v-if="useError(errors.age, 'too_small')">You must be at least 18 years old.</span>
-
+  <form novalidate @submit.prevent="submit">
+    <label for="email">Email</label>
+    <input
+      id="email"
+      v-model="email"
+      type="email"
+      :aria-invalid="hasError('email')"
+      aria-describedby="email-errors"
+      @blur="validateFor('email')"
+    >
+    <div id="email-errors" aria-live="polite">
+      <p v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
+        {{ error }}
+      </p>
+    </div>
     <button type="submit">
       Submit
     </button>
@@ -131,14 +60,26 @@ function handleSubmit() {
 </template>
 ```
 
-## 📚 Documentation
+`validateFor('email')` runs the complete schema but publishes only that exact
+path, which makes it suitable for blur validation. Use `validate()` for submit:
+it publishes the complete form result and owns transformed schema output.
 
-Read the [documentation and demos](https://verific.josephanson.com/).
+The `@verific/core` runtime exports are `useValidation`, `createVerific` and
+`ErrorMessages`. Most forms only need `useValidation`; `createVerific` adds
+application-wide message handling, while `ErrorMessages` is an optional error
+input normaliser. See [Rendering errors](https://verific.josephanson.com/guide/components/error-messages).
+
+## Learn more
+
+- [Getting started](https://verific.josephanson.com/guide/)
+- [`useValidation` reference](https://verific.josephanson.com/guide/reference/use-validation)
+- [Localisation](https://verific.josephanson.com/guide/localisation)
+- [Nuxt](https://verific.josephanson.com/guide/nuxt)
 
 ## Contributing
 
-You are welcome to contribute to this project, but before you do, please make sure you read the [contribution guide](/CONTRIBUTING.md).
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## ⚖️ License
+## Licence
 
-Released under [MIT](/LICENSE) by [@josephanson](https://github.com/josephanson).
+Released under the [MIT licence](./LICENSE).

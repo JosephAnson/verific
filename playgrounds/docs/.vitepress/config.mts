@@ -1,21 +1,33 @@
 import { defineConfig } from 'vitepress'
 
-const Guide = [
-  { text: 'Getting Started', link: '/guide' },
+const Start = [
+  { text: 'Getting started', link: '/guide/' },
   { text: 'Why Verific?', link: '/guide/why' },
 ]
 
-const Components = [
-  { text: 'Error Messages', link: '/guide/components/error-messages' },
+const CoreConcepts = [
+  { text: 'Scopes and registrations', link: '/guide/core/nested-validation' },
+  { text: 'Issues and errors', link: '/guide/core/issues-and-errors' },
+  { text: 'Submitting validated data', link: '/guide/core/service-layer-to-validation' },
+  { text: 'Rendering errors', link: '/guide/components/error-messages' },
 ]
 
-const CoreConcepts = [
-  { text: 'Service Layer to Validation', link: '/guide/core/service-layer-to-validation' },
-  { text: 'Nested Validation', link: '/guide/core/nested-validation' },
+const Localisation = [
+  { text: 'Overview', link: '/guide/localisation' },
+  { text: 'Vue I18n', link: '/guide/localisation/vue-i18n' },
+  { text: 'i18next', link: '/guide/localisation/i18next' },
+  { text: 'Paraglide', link: '/guide/localisation/paraglide' },
+  { text: 'Custom adapters', link: '/guide/localisation/custom-adapters' },
 ]
 
 const Integrations = [
-  { text: 'Nuxt Plugin Guide', link: '/guide/nuxt' },
+  { text: 'Nuxt', link: '/guide/nuxt' },
+]
+
+const Reference = [
+  { text: 'useValidation', link: '/guide/reference/use-validation' },
+  { text: 'Validation lifecycle', link: '/guide/reference/validation-lifecycle' },
+  { text: 'Message resolution', link: '/guide/reference/messages' },
 ]
 
 export default defineConfig({
@@ -29,20 +41,22 @@ export default defineConfig({
     logo: '/logo.png',
     nav: [
       { text: 'Home', link: '/' },
-      { text: 'Introduction', link: '/guide/why' },
-      // { text: 'Playground', link: 'https://stackblitz.com/edit/verific-playground' },
+      { text: 'Guide', link: '/guide/' },
+      { text: 'Localisation', link: '/guide/localisation' },
+      { text: 'Nuxt', link: '/guide/nuxt' },
     ],
 
     sidebar: [
-      { text: 'Guide', items: Guide },
-      { text: 'Components', items: Components },
+      { text: 'Start', items: Start },
       { text: 'Core Concepts', items: CoreConcepts },
+      { text: 'Localisation', items: Localisation },
       { text: 'Integrations', items: Integrations },
+      { text: 'Reference', items: Reference },
     ],
 
     socialLinks: [
       { icon: 'github', link: 'https://github.com/josephanson/verific' },
-      { icon: 'npm', link: 'https://www.npmjs.com/package/verific' },
+      { icon: 'npm', link: 'https://www.npmjs.com/package/@verific/core' },
     ],
   },
   head: [

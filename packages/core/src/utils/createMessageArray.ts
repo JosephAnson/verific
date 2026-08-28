@@ -1,23 +1,23 @@
 import type { MaybeRef } from 'vue'
 import { unref } from 'vue'
 
-export type Messages = string | Messages[] | Record<string, boolean> | false
+export type Messages = string | readonly Messages[] | Readonly<Record<string, boolean>> | false
 
-export function createMessageArray(errors: MaybeRef<Messages>): string[] {
-  const _errors = unref(errors)
+export function createMessageArray(messages: MaybeRef<Messages>): string[] {
+  const value = unref(messages)
 
-  if (!_errors) {
+  if (!value) {
     return []
   }
-  else if (Array.isArray(_errors)) {
-    return _errors.reduce<string[]>((acc, error) => {
-      return acc.concat(createMessageArray(error))
-    }, [])
+
+  if (Array.isArray(value)) {
+    return (value as readonly Messages[]).flatMap(message => createMessageArray(message))
   }
-  else if (typeof _errors === 'object') {
-    return Object.keys(_errors).filter(key => _errors[key])
+
+  if (typeof value === 'object') {
+    const conditionalMessages = value as Readonly<Record<string, boolean>>
+    return Object.keys(conditionalMessages).filter(key => conditionalMessages[key])
   }
-  else {
-    return [_errors]
-  }
+
+  return [value]
 }

@@ -20,3 +20,6 @@ playgrounds/docs/.vitepress/cache
 
 # nuxt
 .nuxt
+
+openspec
+.impeccable

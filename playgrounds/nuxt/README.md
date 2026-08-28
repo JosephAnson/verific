@@ -1,75 +1,14 @@
-# Nuxt 3 Minimal Starter
+# Verific Nuxt playground
 
-Look at the [Nuxt 3 documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
-
-## Setup
-
-Make sure to install the dependencies:
+This app exercises the local core, Vue I18n adapter and Nuxt module with Zod and Valibot.
 
 ```bash
-# npm
-npm install
+# From the repository root
+pnpm dev:nuxt
 
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
+# Type-check or build the playground
+pnpm --dir playgrounds/nuxt exec nuxi typecheck
+pnpm --dir playgrounds/nuxt build
 ```
 
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
-npm run dev
-
-# pnpm
-pnpm run dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
-```
-
-## Production
-
-Build the application for production:
-
-```bash
-# npm
-npm run build
-
-# pnpm
-pnpm run build
-
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm run preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+The pages use the auto-imported `useValidation` composable, automatic request-local Vue I18n integration, descendant registration and a component-local Composer override.

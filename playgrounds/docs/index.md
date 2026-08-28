@@ -4,36 +4,34 @@ layout: home
 
 hero:
   name: "Verific"
-  text: "A Model-Based Form Validation Library"
-  tagline: "Effortlessly validate your forms with model-based validation"
+  text: "Model validation for Vue"
+  tagline: "Validate one Vue-owned model or coordinate schemas across a component tree"
   image:
     src: /logo.png
     alt: Verific Model-Based Validation
   actions:
     - theme: brand
       text: Getting Started
-      link: /guide
+      link: /guide/
     - theme: alt
       text: Why Verific?
       link: /guide/why
 
 features:
-  - icon: "🔍"
-    title: Model-Driven Validation
-    details: "Leverage your data models to automatically validate forms with ease."
-  - icon: "🔗"
-    title: Seamless Integration
-    details: "Integrate with your existing Vue applications without hassle."
-  - icon: "⚙️"
-    title: Customizable Rules
-    details: "Define custom validation rules to suit your application's needs."
-  - icon: "🪄"
-    title: Nested Components Support
-    details: "Easily validate forms with nested components, ensuring a seamless validation experience."
-  - icon: "🚀"
-    title: Nuxt Support
-    details: "Easily integrate Verific with Nuxt 3 for enhanced form validation capabilities."
-  - icon: "🦾"
-    title: Type Strong
-    details: "Written in TypeScript, with full TS docs"
+  - title: Validate one form
+    details: "Connect a Standard Schema to a Vue-owned model and submit only valid data."
+    link: /guide/#validate-one-model
+    linkText: Start with one form
+  - title: Compose descendant registrations
+    details: "Collect schemas and models from nested components into one validation scope."
+    link: /guide/core/nested-validation
+    linkText: Compose a form
+  - title: Render and localise errors
+    details: "Turn structured issues into accessible error messages in the reader's locale."
+    link: /guide/localisation
+    linkText: Localise errors
+  - title: Use Verific with Nuxt
+    details: "Configure validation once and use the same interface throughout a Nuxt application."
+    link: /guide/nuxt
+    linkText: Integrate with Nuxt
 ---

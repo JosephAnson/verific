@@ -1,0 +1,63 @@
+{
+  "name": "@verific/i18next",
+  "version": "0.1.1",
+  "description": "i18next message adapter for Verific",
+  "author": "Joseph Anson <https://github.com/josephanson>",
+  "license": "MIT",
+  "homepage": "https://verific.josephanson.com/",
+  "repository": {
+    "url": "git+https://github.com/josephanson/verific.git",
+    "type": "git",
+    "directory": "packages/i18next"
+  },
+  "bugs": {
+    "url": "https://github.com/josephanson/verific/issues"
+  },
+  "keywords": [
+    "VueJS",
+    "Vue",
+    "validation",
+    "internationalisation",
+    "i18n",
+    "i18next"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.mjs",
+      "require": "./dist/main.js"
+    }
+  },
+  "main": "./dist/main.js",
+  "module": "./dist/main.mjs",
+  "types": "./dist/main.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/main.ts --format cjs,esm --dts --clean",
+    "test": "vitest run --root ../.. --config packages/i18next/vitest.config.mts packages/i18next/tests",
+    "typecheck": "tsc --noEmit -p tsconfig.json --skipLibCheck",
+    "prepack": "pnpm build"
+  },
+  "peerDependencies": {
+    "@verific/core": "workspace:^",
+    "i18next": ">=26 <27",
+    "vue": "^3.4.26"
+  },
+  "dependencies": {
+    "@verific/i18n": "workspace:^"
+  },
+  "devDependencies": {
+    "@verific/core": "workspace:*",
+    "@verific/i18n": "workspace:*",
+    "i18next": "26.4.0",
+    "tsup": "^8.5.1",
+    "vue": "^3.5.42"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

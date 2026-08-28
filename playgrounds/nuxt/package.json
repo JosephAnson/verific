@@ -1,5 +1,5 @@
 {
-  "name": "@verific/nuxt",
+  "name": "@verific/playground-nuxt",
   "type": "module",
   "private": true,
   "scripts": {
@@ -10,14 +10,20 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "@nuxt/ui": "2.18.7",
-    "@standard-schema/spec": "^1.0.0",
+    "@nuxt/ui": "4.11.0",
+    "@nuxtjs/i18n": "10.6.0",
+    "@standard-schema/spec": "^1.1.0",
     "@verific/core": "workspace:*",
     "@verific/nuxt": "workspace:*",
-    "arktype": "^1.0.14-alpha",
-    "valibot": "1.0.0-rc.3",
-    "vue": "latest",
-    "vue-router": "latest",
-    "zod": "^3.24.2"
+    "@verific/vue-i18n": "workspace:*",
+    "valibot": "1.4.2",
+    "vue": "^3.5.42",
+    "vue-i18n": "11.4.10",
+    "vue-router": "^5.2.0",
+    "zod": "^4.5.1"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
   }
 }

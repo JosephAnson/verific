@@ -2,34 +2,40 @@
 outline: deep
 ---
 
-# Introduction
+# Why Verific?
 
-In the journey of developing various projects, I realized the need for a robust form validation library that leverages model-based validation. After exploring existing solutions and not finding one that fully met my requirements, I decided to create my own: **Verific**.
+Schema libraries validate a value well. Vue forms introduce a coordination problem: the application owns a model, its schemas may be registered by several components, and one submit action must validate them together.
 
-## Why Do You Need Verific?
+Verific provides that coordination without replacing the schema library or becoming a field-state library.
 
-If you're using **Vue 3** and want a seamless way to validate your forms using your existing data models, then **Verific** is the solution. It integrates effortlessly with your Vue applications and provides a powerful validation mechanism using **Zod**.
+## What Verific owns
 
-Verific allows you to define your validation rules directly on your data models, making it intuitive and reducing the redundancy of defining validation logic separately. This model-based approach ensures that your validation logic is consistent and centralized.
+- A **scope** that coordinates one or more registrations.
+- The lifecycle of each schema and model **registration** in that scope.
+- Structured **issues**, exact path selection and safe concurrent validation.
+- A resolver seam that derives ready-to-render **errors** from issues.
+- Each registration's typed, potentially transformed output.
 
-Additionally, Verific offers flexibility with both the Composition API and Declarative Components, allowing you to choose the style that best fits your development needs.
+## What the application owns
 
-## Why Not Other Validation Libraries?
+- The reactive model and input bindings.
+- Touched, dirty and submit-attempt state.
+- When validation runs and what happens after it succeeds.
+- Error markup, styling and accessibility.
+- Translation catalogues and locale selection.
 
-While there are several validation libraries available, Verific stands out due to its model-based approach and integration with Zod. Here's why you might prefer Verific:
+This separation keeps `useValidation` useful with native inputs, a design system or custom field components. Error arrays are the simplest rendering interface; the optional renderless component only normalises more flexible message inputs.
 
-### Model-Based Validation
+## Why Standard Schema?
 
-Verific allows you to define validation rules directly on your data models. This approach ensures that your validation logic is consistent and reduces the redundancy of defining validation logic separately from your data models.
+[Standard Schema](https://standardschema.dev/) lets Verific accept Zod, Valibot and other compatible schemas through one interface. Verific preserves each original validator issue and adds stable local and scope-resolved paths.
 
-### Zod Integration
+Known issue shapes can also receive a semantic identifier such as `invalidEmail` or `minLength`. Localisation can depend on that meaning instead of vendor-specific prose. Unknown shapes safely fall back to the schema message.
 
-By using **Zod**, Verific provides a powerful and expressive way to define validation schemas. Zod's schema definitions are type-safe and integrate seamlessly with TypeScript, providing a robust validation mechanism.
+## Why scopes?
 
-### Flexibility and Ease of Use
+A single `useValidation(schema, model)` call creates a scope when no scope is available. Later calls in the same component or its descendants join the nearest scope, so one awaited `validate()` covers the currently registered models.
 
-Verific offers two styles of integration: the Composition API and Declarative Components. This flexibility allows you to choose the style that best fits your development needs, whether you prefer a more programmatic approach or a declarative one.
+Registrations follow Vue's component lifecycle. A removed descendant no longer participates, and a deliberately independent nested form can start a new scope.
 
-### Example
-
-Here's a simple example of how you can use Verific with the Composition API:
+Read [scopes and registrations](/guide/core/nested-validation) for the component-tree rules.

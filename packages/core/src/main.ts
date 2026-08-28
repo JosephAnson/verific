@@ -1,23 +1,29 @@
-import type { Messages } from './utils/createMessageArray'
-import { ErrorMessages } from './components/ErrorMessages'
-import { createValidationScope, useValidate } from './core'
-import { createVerific } from './plugin'
-import { createMessageArray } from './utils/createMessageArray'
-import { ErrorCode, ErrorCodeUnion, useError } from './utils/useError'
-import { getErrorMessages, isStandardSchema, unwrapSchema, validateWithStandardSchema } from './utils/schemaUtils'
-
-export { 
-  createMessageArray, 
-  createValidationScope, 
-  createVerific, 
-  ErrorCode, 
-  ErrorCodeUnion, 
-  ErrorMessages, 
-  getErrorMessages,
-  isStandardSchema,
-  Messages, 
-  unwrapSchema,
-  useError, 
-  useValidate,
-  validateWithStandardSchema
-}
+export { ErrorMessages } from './components/ErrorMessages'
+export { useValidation } from './composables/useValidation'
+export type {
+  RegistrationResult,
+  ValidationController,
+  ValidationData,
+  ValidationFields,
+  ValidationGroup,
+  ValidationOptions,
+  ValidationPath,
+  ValidationResult,
+  ValidationScopeOptions,
+} from './composables/useValidation'
+export type {
+  DiagnosticMessageAdapter,
+  IssueNormaliser,
+  MessageContext,
+  MessageResolution,
+  MessageResolver,
+  MessageResolverFunction,
+  MissingMessageAttempt,
+  MissingMessageDiagnostic,
+  SemanticIssue,
+  ValidationIssue,
+  ValidationIssueContext,
+} from './messages'
+export { createVerific } from './plugin'
+export type { Verific, VerificOptions } from './plugin'
+export type { Messages } from './utils/createMessageArray'

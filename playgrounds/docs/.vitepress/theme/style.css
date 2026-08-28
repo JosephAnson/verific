@@ -43,16 +43,16 @@
  *   in custom container, badges, etc.
  * -------------------------------------------------------------------------- */
 
- :root {
+:root {
   --vp-c-default-1: var(--vp-c-gray-1);
   --vp-c-default-2: var(--vp-c-gray-2);
   --vp-c-default-3: var(--vp-c-gray-3);
   --vp-c-default-soft: var(--vp-c-gray-soft);
 
-  --vp-c-brand-1: #905cb7;
-  --vp-c-brand-2: #66259a;
-  --vp-c-brand-3: #8340B8;
-  --vp-c-brand-soft: var(--vp-c-indigo-soft);
+  --vp-c-brand-1: #6f2c91;
+  --vp-c-brand-2: #5d217e;
+  --vp-c-brand-3: #74309a;
+  --vp-c-brand-soft: rgb(111 44 145 / 14%);
 
   --vp-c-tip-1: var(--vp-c-brand-1);
   --vp-c-tip-2: var(--vp-c-brand-2);
@@ -70,6 +70,258 @@
   --vp-c-danger-soft: var(--vp-c-red-soft);
 }
 
+.dark {
+  --vp-c-brand-1: #c39ae2;
+  --vp-c-brand-2: #d4b8ea;
+  --vp-c-brand-3: #74309a;
+  --vp-c-brand-soft: rgb(195 154 226 / 16%);
+}
+
+.vp-doc a {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.vp-doc a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.vp-doc a:focus-visible,
+.VPNav a:focus-visible,
+.VPSidebar a:focus-visible,
+.VPHome a:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 3px;
+}
+
+/**
+ * Pattern: Concept flow
+ * -------------------------------------------------------------------------- */
+
+.vp-doc .verific-flow {
+  counter-reset: verific-step;
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 24px 0;
+  padding: 0;
+}
+
+.vp-doc .verific-flow > li {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  counter-increment: verific-step;
+  padding: 16px 18px 16px 58px;
+  position: relative;
+}
+
+.vp-doc .verific-flow > li::before {
+  align-items: center;
+  background: var(--vp-c-brand-soft);
+  border: 1px solid var(--vp-c-brand-1);
+  border-radius: 50%;
+  color: var(--vp-c-brand-1);
+  content: counter(verific-step);
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  height: 28px;
+  justify-content: center;
+  left: 16px;
+  position: absolute;
+  top: 15px;
+  width: 28px;
+}
+
+.vp-doc .verific-flow > li:not(:last-child)::after {
+  background: var(--vp-c-divider);
+  bottom: -13px;
+  content: '';
+  height: 12px;
+  left: 29px;
+  position: absolute;
+  width: 2px;
+}
+
+.vp-doc .verific-flow > li > strong:first-child {
+  display: block;
+  margin-bottom: 4px;
+}
+
+/**
+ * Pattern: Runnable examples
+ * -------------------------------------------------------------------------- */
+
+.vp-doc .verific-example {
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  margin: 24px 0;
+  min-width: 0;
+  padding: 20px;
+}
+
+.vp-doc .verific-example form,
+.vp-doc .verific-example fieldset {
+  margin: 0;
+  min-width: 0;
+}
+
+.vp-doc .verific-example fieldset {
+  border: 0;
+  padding: 0;
+}
+
+.vp-doc .verific-example legend {
+  color: var(--vp-c-text-1);
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  padding: 0;
+}
+
+.vp-doc .verific-example__grid {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.vp-doc .verific-example__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.vp-doc .verific-example__field label,
+.vp-doc .verific-example__toggle {
+  color: var(--vp-c-text-1);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.vp-doc .verific-example input:not([type='checkbox']),
+.vp-doc .verific-example select {
+  appearance: none;
+  background: var(--vp-c-bg);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  color: var(--vp-c-text-1);
+  font: inherit;
+  inline-size: 100%;
+  min-block-size: 44px;
+  min-inline-size: 0;
+  padding: 9px 11px;
+}
+
+.vp-doc .verific-example select {
+  appearance: auto;
+}
+
+.vp-doc .verific-example input[aria-invalid='true'] {
+  border-color: var(--vp-c-danger-1);
+}
+
+.vp-doc .verific-example input:focus-visible,
+.vp-doc .verific-example select:focus-visible,
+.vp-doc .verific-example button:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+.vp-doc .verific-example__errors {
+  color: var(--vp-c-danger-1);
+  font-size: 13px;
+  line-height: 1.45;
+  list-style: none;
+  margin: 0;
+  min-block-size: 1.45em;
+  overflow-wrap: anywhere;
+  padding: 0;
+}
+
+.vp-doc .verific-example__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.vp-doc .verific-example button {
+  background: var(--vp-c-brand-3);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--vp-c-white);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 9px 14px;
+}
+
+.vp-doc .verific-example button:hover:not(:disabled) {
+  background: var(--vp-button-brand-hover-bg);
+}
+
+.vp-doc .verific-example button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.vp-doc .verific-example__outcome {
+  border-top: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  margin: 18px 0 0;
+  overflow-wrap: anywhere;
+  padding-top: 14px;
+}
+
+.vp-doc .verific-example__toolbar {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.vp-doc .verific-example__counter {
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+.vp-doc .verific-example__toggle {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.vp-doc .verific-example__toggle input {
+  block-size: 18px;
+  flex: 0 0 auto;
+  inline-size: 18px;
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .vp-doc .verific-example__grid,
+  .vp-doc .verific-example__toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  body {
+    min-width: 0;
+  }
+
+  .vp-doc .verific-example {
+    padding: 16px;
+  }
+}
+
 /**
  * Component: Button
  * -------------------------------------------------------------------------- */
@@ -80,10 +332,10 @@
   --vp-button-brand-bg: var(--vp-c-brand-3);
   --vp-button-brand-hover-border: transparent;
   --vp-button-brand-hover-text: var(--vp-c-white);
-  --vp-button-brand-hover-bg: var(--vp-c-brand-2);
+  --vp-button-brand-hover-bg: #662585;
   --vp-button-brand-active-border: transparent;
   --vp-button-brand-active-text: var(--vp-c-white);
-  --vp-button-brand-active-bg: var(--vp-c-brand-1);
+  --vp-button-brand-active-bg: #54206e;
 }
 
 /**
@@ -136,4 +388,3 @@
 .DocSearch {
   --docsearch-primary-color: var(--vp-c-brand-1) !important;
 }
-

@@ -11,22 +11,26 @@
     "type-check": "vue-tsc --build --force"
   },
   "dependencies": {
-    "@primevue/themes": "^4.1.1",
+    "@primeuix/themes": "^2.0.3",
     "@verific/core": "workspace:*",
-    "primevue": "^4.1.1",
-    "vue": "^3.5.12",
-    "vue-router": "^4.4.5"
+    "@verific/vue-i18n": "workspace:*",
+    "primevue": "^4.5.5",
+    "vue": "^3.5.42",
+    "vue-i18n": "11.4.10",
+    "vue-router": "^5.2.0",
+    "zod": "^4.5.1"
   },
   "devDependencies": {
-    "@tsconfig/node20": "^20.1.4",
-    "@types/node": "^20.16.11",
-    "@vitejs/plugin-vue": "^5.1.4",
-    "@vue/tsconfig": "^0.5.1",
-    "npm-run-all2": "^6.2.3",
-    "tailwindcss": "3.4.14",
-    "typescript": "~5.5.4",
-    "vite": "^5.4.8",
-    "vite-plugin-vue-devtools": "^7.4.6",
-    "vue-tsc": "^2.1.6"
+    "@tailwindcss/vite": "^4.3.3",
+    "@tsconfig/node24": "^24.0.5",
+    "@types/node": "^24.13.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/tsconfig": "^0.9.1",
+    "npm-run-all2": "^9.0.3",
+    "tailwindcss": "4.3.3",
+    "typescript": "~5.9.3",
+    "vite": "^8.2.2",
+    "vite-plugin-vue-devtools": "^8.2.1",
+    "vue-tsc": "^3.3.11"
   }
 }

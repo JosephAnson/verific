@@ -1,15 +1,37 @@
-import tsconfigPaths from 'vite-tsconfig-paths'
+import { fileURLToPath } from 'node:url'
 import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  plugins: [tsconfigPaths()],
+  resolve: {
+    alias: {
+      '#app': fileURLToPath(new URL('./packages/nuxt/tests/stubs/nuxt-app.ts', import.meta.url)),
+    },
+  },
   test: {
-    setupFiles: ['./vitest.setup.ts'],
     environment: 'jsdom',
     globals: true,
-    exclude: ['docs/*', ...configDefaults.exclude],
+    exclude: [...configDefaults.exclude],
     coverage: {
-      exclude: ['**/*/devtools.ts', 'packages/**/dist/**', 'docs/*', ...(configDefaults.coverage.exclude || [])],
+      include: ['packages/*/src/**'],
+      exclude: ['packages/core/src/main.ts', ...(configDefaults.coverage.exclude || [])],
+      thresholds: {
+        'packages/core/src/**': {
+          branches: 75,
+          functions: 100,
+          lines: 90,
+          statements: 90,
+        },
+        'packages/nuxt/src/**': {
+          branches: 80,
+          functions: 50,
+          lines: 75,
+          statements: 75,
+        },
+        'branches': 80,
+        'functions': 95,
+        'lines': 90,
+        'statements': 90,
+      },
     },
   },
   define: {

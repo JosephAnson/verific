@@ -24,15 +24,12 @@ body:
         2.
         3.
         ...
-  - type: dropdown
+  - type: input
     id: version
     attributes:
-      label: Version
-      description: What version of Vue.js and verific are you running?
-      options:
-        - Vue.js 3.x and verific 4.x
-        - Vue.js 2.x and verific 3.x
-        - Vue.js 2.x and verific 2.x
+      label: Versions
+      description: Which versions of Vue, Verific, Nuxt and your schema library are you using?
+      placeholder: Vue 3.5, @verific/core 0.0.2, Zod 4.4
     validations:
       required: true
   - type: checkboxes
@@ -48,7 +45,7 @@ body:
     id: logs
     attributes:
       label: Relevant log output
-      description: If you have an error log or stacktrack, copy it and paste it here
+      description: If you have an error log or stack trace, copy and paste it here
       render: shell
   - type: input
     id: demo

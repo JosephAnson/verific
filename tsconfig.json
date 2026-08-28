@@ -2,15 +2,9 @@
   "compilerOptions": {
     "target": "es2017",
     "lib": ["esnext", "es2017", "dom"],
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "baseUrl": ".",
     "rootDir": ".",
     "module": "esnext",
-    "moduleResolution": "node",
-    "paths": {
-      "@/*": ["packages/*/src"]
-    },
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "typeRoots": ["node_modules/@types"],
     "strict": true,
@@ -24,5 +18,5 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true
   },
-  "include": ["packages/*/src", "packages/*/tests", "vitest.setup.ts"]
+  "include": ["packages/*/src", "packages/*/tests"]
 }

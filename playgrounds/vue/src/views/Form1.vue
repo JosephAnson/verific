@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { createValidationScope, ErrorMessages, useError, useValidate } from '@verific/core'
+import { useValidation } from '@verific/core'
 import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
 import { ref } from 'vue'
 import { z } from 'zod'
 
@@ -13,10 +12,11 @@ const schema = z.object({
 const email = ref('')
 const password = ref('')
 
-const { validate } = createValidationScope()
-const { errors } = useValidate(schema, {
+const { errorsFor, isValidating, validate } = useValidation(schema, {
   email,
   password,
+}, {
+  messagePrefix: 'forms.account',
 })
 
 async function onSubmit(event: Event) {
@@ -38,28 +38,21 @@ async function onSubmit(event: Event) {
     <form class="space-y-4" @submit="onSubmit">
       <div class="flex-col flex">
         <InputText v-model="email" type="email" />
-        <ErrorMessages
-          :as="Message"
-          severity="error"
-          :messages="{
-            ['This field is required']: useError(errors.email, 'too_small'),
-            ['This string is valid']: useError(errors.email, 'invalid_string'),
-          }"
+        <span
+          v-for="(error, index) in errorsFor('email')"
+          :key="`${index}:${error}`"
           class="w-full text-sm block text-red-400"
-        />
+        >{{ error }}</span>
       </div>
       <div class="flex-col flex">
         <InputText v-model="password" type="password" />
-        <ErrorMessages
-          :as="Message"
-          severity="error"
-          :messages="{
-            ['This field is required']: useError(errors.password, 'too_small'),
-          }"
+        <span
+          v-for="(error, index) in errorsFor('password')"
+          :key="`${index}:${error}`"
           class="w-full text-sm block text-red-400"
-        />
+        >{{ error }}</span>
       </div>
-      <button type="submit">
+      <button type="submit" :disabled="isValidating">
         Submit
       </button>
     </form>

@@ -1,5 +1,44 @@
+ignoreScripts: true
+
+minimumReleaseAge: 0
+
+shamefullyHoist: true
+
+shellEmulator: true
+
+sideEffectsCache: false
+
+strictPeerDependencies: false
+
+trustPolicy: off
+
 packages:
   - packages/*
   - playgrounds/*
-onlyBuiltDependencies:
-  - arktype
+
+overrides:
+  # Changelogithub pins an older changelogen release with a vulnerable tar chain.
+  changelogithub>changelogen: 0.6.2
+  # Patch the esbuild development-server advisory in upstream build tooling.
+  esbuild@>=0.27.3 <0.28.1: 0.28.2
+  typescript: 5.9.3
+  # VitePress 1 still requests Vite 5; Vite 6.4.3 contains its security fixes.
+  vitepress>vite: 6.4.3
+
+peerDependencyRules:
+  allowedVersions:
+    vue-sfc-transformer: 0.2.5
+
+update:
+  ignoreDeps:
+    # PrimeVue 5 and Themes 3 use the PrimeUI licence rather than MIT.
+    - '@primeuix/themes'
+    - primevue
+    # Match the Node 24 runtime used locally and in CI.
+    - '@types/node'
+    # Vue and Nuxt tooling do not yet support the TypeScript 7 compiler API.
+    - typescript
+
+allowBuilds:
+  esbuild: true
+  vue-demi: true

@@ -1,0 +1,61 @@
+{
+  "name": "@verific/paraglide",
+  "version": "0.1.1",
+  "description": "Paraglide message adapter for Verific",
+  "author": "Joseph Anson <https://github.com/josephanson>",
+  "license": "MIT",
+  "homepage": "https://verific.josephanson.com/",
+  "repository": {
+    "url": "git+https://github.com/josephanson/verific.git",
+    "type": "git",
+    "directory": "packages/paraglide"
+  },
+  "bugs": {
+    "url": "https://github.com/josephanson/verific/issues"
+  },
+  "keywords": [
+    "VueJS",
+    "Vue",
+    "validation",
+    "internationalisation",
+    "i18n",
+    "Paraglide"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.mjs",
+      "require": "./dist/main.js"
+    }
+  },
+  "main": "./dist/main.js",
+  "module": "./dist/main.mjs",
+  "types": "./dist/main.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/main.ts --format cjs,esm --dts --clean",
+    "test": "vitest run --root ../.. --config packages/paraglide/vitest.config.mts packages/paraglide/tests",
+    "typecheck": "tsc --noEmit -p tsconfig.json --skipLibCheck",
+    "prepack": "pnpm build"
+  },
+  "peerDependencies": {
+    "@inlang/paraglide-js": ">=2 <3",
+    "@verific/core": "workspace:^"
+  },
+  "dependencies": {
+    "@verific/i18n": "workspace:^"
+  },
+  "devDependencies": {
+    "@inlang/paraglide-js": "2.25.0",
+    "@verific/core": "workspace:*",
+    "@verific/i18n": "workspace:*",
+    "tsup": "^8.5.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

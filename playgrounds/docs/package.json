@@ -9,9 +9,29 @@
   "scripts": {
     "dev": "vitepress dev",
     "build": "vitepress build",
+    "test": "tsc --noEmit -p guide/localisation/examples/tsconfig.json && vitest run --config vitest.config.mts .vitepress/examples/examples.check.ts && vitest run --config guide/localisation/examples/vitest.config.mts",
+    "check": "pnpm test && node scripts/check-docs.mjs --self-test && node scripts/check-docs.mjs && vitepress build",
     "preview": "vitepress preview"
   },
+  "dependencies": {
+    "@inlang/paraglide-js": "2.25.0",
+    "@verific/core": "workspace:*",
+    "@verific/i18n": "workspace:*",
+    "@verific/i18next": "workspace:*",
+    "@verific/paraglide": "workspace:*",
+    "@verific/vue-i18n": "workspace:*",
+    "i18next": "26.4.0",
+    "i18next-vue": "5.4.0",
+    "vue": "^3.5.42",
+    "vue-i18n": "11.4.10",
+    "zod": "4.5.1"
+  },
   "devDependencies": {
-    "vitepress": "^1.4.0"
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/test-utils": "^2.5.0",
+    "jsdom": "^30.0.1",
+    "typescript": "5.9.3",
+    "vitepress": "^1.6.4",
+    "vitest": "^4.1.11"
   }
 }

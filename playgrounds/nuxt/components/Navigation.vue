@@ -1,3 +1,7 @@
+<script setup lang="ts">
+const { locale } = useI18n({ useScope: 'global' })
+</script>
+
 <template>
   <nav class="bg-gray-800 text-white p-4">
     <div class="container mx-auto flex items-center justify-between">
@@ -21,6 +25,13 @@
           </NuxtLink>
         </li>
       </ul>
+      <button
+        type="button"
+        class="rounded border border-white px-3 py-1"
+        @click="locale = locale === 'en' ? 'es' : 'en'"
+      >
+        {{ locale === 'en' ? 'Español' : 'English' }}
+      </button>
     </div>
   </nav>
 </template>

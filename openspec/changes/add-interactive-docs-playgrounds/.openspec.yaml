@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-08-28
+goal: Add accessible runnable validation examples inline in the documentation,
+  backed by the same source shown to readers and verified through interaction
+  tests.
