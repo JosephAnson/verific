@@ -1,6 +1,6 @@
 {
   "name": "@verific/vue-i18n",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Vue I18n message adapter for Verific",
   "author": "Joseph Anson <https://github.com/josephanson>",
   "license": "MIT",
