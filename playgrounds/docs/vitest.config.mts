@@ -17,6 +17,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     clearMocks: true,
-    include: ['.vitepress/examples/examples.check.ts'],
+    include: ['.vitepress/examples/*.check.ts'],
   },
 })

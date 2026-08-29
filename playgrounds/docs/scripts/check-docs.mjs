@@ -358,6 +358,13 @@ function parseAttributes(source) {
 function describedIds(value) {
   const ids = new Set()
   const targetExpression = value.includes('?') ? value.slice(value.indexOf('?') + 1) : value
+  const vueTemplateLiteral = targetExpression.match(/^`([\w${}:\s-]+)`$/)
+
+  if (vueTemplateLiteral) {
+    for (const id of vueTemplateLiteral[1].split(/\s+/))
+      ids.add(`\`${id}\``)
+    return ids
+  }
 
   if (/^[\w:\s-]+$/.test(targetExpression)) {
     for (const id of targetExpression.split(/\s+/))
@@ -881,6 +888,18 @@ const errorsFor = () => []
     <label for="example-email">Email</label>
     <input id="example-email" :aria-invalid="errorsFor('email').length > 0" aria-describedby="example-email-errors">
     <p id="example-email-errors" aria-live="polite">{{ errorsFor('email')[0] }}</p>
+
+    <div v-for="(contact, index) in contacts" :key="index">
+      <label :for="\`example-contact-\${index}\`">Contact {{ index + 1 }}</label>
+      <input
+        :id="\`example-contact-\${index}\`"
+        v-model="contact.email"
+        :aria-invalid="errorsFor(['contacts', index, 'email']).length > 0"
+        :aria-describedby="\`example-contact-\${index}-errors example-contact-\${index}-state\`"
+      >
+      <p :id="\`example-contact-\${index}-errors\`" aria-live="polite">{{ errorsFor(['contacts', index, 'email'])[0] }}</p>
+      <p :id="\`example-contact-\${index}-state\`">Current row</p>
+    </div>
   </form>
 </template>
 `),
@@ -943,6 +962,10 @@ async function runSelfTest() {
       [examplePath, originalExample],
       [childPath, originalChild],
     ])
+    const vueIndex = '$' + '{index}'
+    const dynamicContactDescription = `:aria-describedby="\`example-contact-${vueIndex}-errors example-contact-${vueIndex}-state\`"`
+    const brokenDynamicContactDescription = dynamicContactDescription.replace('-errors', '-missing')
+    const dynamicContactFailure = `control "\`example-contact-${vueIndex}\`" describes a missing error container`
     const mutations = [
       [configPath, originalConfig.replace('  { text: \'Details\', link: \'/guide/details\' },\n', ''), 'missing from the sidebar'],
       [configPath, originalConfig.replace('      { text: \'More\', items: More },\n', ''), '/guide/details: guide page is missing from the sidebar'],
@@ -965,6 +988,7 @@ async function runSelfTest() {
       [indexPath, originalIndex.replace('<<< ../.vitepress/examples/AccessibleExample.vue', '<<< ../.vitepress/examples/ChildField.vue'), 'rendered component does not disclose its source'],
       [examplePath, originalExample.replace('    <label for="example-email">Email</label>\n', ''), 'control "example-email" is missing an accessible name'],
       [examplePath, originalExample.replace(' :aria-invalid="errorsFor(\'email\').length > 0" aria-describedby="example-email-errors"', ''), 'control "example-email" is missing invalid state'],
+      [examplePath, originalExample.replace(dynamicContactDescription, brokenDynamicContactDescription), dynamicContactFailure],
       [childPath, originalChild.replace(' aria-describedby="child-name-errors"', ''), 'control "child-name" is missing error association'],
     ]
 
