@@ -2,6 +2,7 @@ export { ErrorMessages } from './components/ErrorMessages'
 export { useValidation } from './composables/useValidation'
 export type {
   RegistrationResult,
+  TargetValidationResult,
   ValidationController,
   ValidationData,
   ValidationFields,

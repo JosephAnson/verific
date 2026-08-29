@@ -1,6 +1,6 @@
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 import type { App, Component } from 'vue'
-import type { DiagnosticMessageAdapter, IssueNormaliser, MessageContext, ValidationGroup, ValidationIssue, ValidationResult } from '../src/main'
+import type { DiagnosticMessageAdapter, IssueNormaliser, MessageContext, TargetValidationResult, ValidationGroup, ValidationIssue, ValidationResult } from '../src/main'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { computed, createApp, defineComponent, h, nextTick, reactive, ref, watch } from 'vue'
 import { createVerific, useValidation } from '../src/main'
@@ -219,10 +219,21 @@ describe('targeted validation', () => {
     const schema = createSchema<typeof model>('test', validator)
     const mounted = mountValidation(() => useValidation(schema, model), false)
 
-    await expect(mounted.value.validateFor('confirmation')).resolves.toMatchObject({
-      success: false,
+    const targeted = mounted.value.validateFor('confirmation')
+    expectTypeOf(targeted).toEqualTypeOf<Promise<TargetValidationResult>>()
+    expectTypeOf(mounted.value.validate).returns.toEqualTypeOf<Promise<ValidationResult>>()
+    const targetedResult = await targeted
+    expect(targetedResult).toMatchObject({
       issues: [expect.objectContaining({ message: 'Does not match' })],
     })
+    expect(targetedResult).not.toHaveProperty('success')
+    expectTypeOf(targetedResult).toEqualTypeOf<TargetValidationResult>()
+    if (false) {
+      // @ts-expect-error Targeted validation does not expose submission authority.
+      void targetedResult.success
+      // @ts-expect-error Targeted issue collections are readonly.
+      targetedResult.issues.push(targetedResult.issues[0]!)
+    }
 
     expect(validator).toHaveBeenCalledWith({ password: 'secret', confirmation: '', profile: { name: '' } })
     expect(mounted.value.errors.value).toEqual(['Does not match'])
@@ -249,7 +260,7 @@ describe('targeted validation', () => {
     const retainedPasswordIssue = mounted.value.issuesFor('password')[0]
 
     email.value = 'valid@example.com'
-    await expect(mounted.value.validateFor('email')).resolves.toEqual({ success: true, issues: [] })
+    await expect(mounted.value.validateFor('email')).resolves.toEqual({ issues: [] })
 
     expect(mounted.value.errors.value).toEqual(['Password required'])
     expect(mounted.value.issuesFor('password')[0]).toBe(retainedPasswordIssue)
@@ -278,8 +289,9 @@ describe('targeted validation', () => {
     const schema = createSchema<unknown>('test', () => ({ issues: [{ message: 'Shipping invalid' }] }))
     const mounted = mountValidation(() => useValidation(schema, {}, { at: ['shipping'] }), false)
 
-    await expect(mounted.value.validateFor([])).resolves.toMatchObject({ success: false })
+    const result = await mounted.value.validateFor([])
 
+    expect(result).toEqual({ issues: mounted.value.issuesFor([]) })
     expect(mounted.value.errorsFor([])).toEqual(['Shipping invalid'])
     expect(mounted.value.issues.value[0]?.path).toEqual(['shipping'])
     expect(mounted.value.result.value).toEqual({ status: 'idle' })
@@ -292,8 +304,9 @@ describe('targeted validation', () => {
     }))
     const mounted = mountValidation(() => useValidation(schema, { [field]: '' }), false)
 
-    await expect(mounted.value.validateFor(field)).resolves.toMatchObject({ success: false })
+    const result = await mounted.value.validateFor(field)
 
+    expect(result).toEqual({ issues: mounted.value.issuesFor(field) })
     expect(mounted.value.errorsFor(field)).toEqual(['Symbol field invalid'])
     expect(mounted.value.issues.value[0]?.path).toEqual([field])
   })
@@ -329,8 +342,9 @@ describe('targeted validation', () => {
     const newer = mounted.value.validateFor('email')
     resolvers.get('newer')?.({ issues: [{ message: 'Current', path: ['email'] }] })
 
-    await expect(newer).resolves.toMatchObject({ success: false })
-    await expect(older).resolves.toEqual(await newer)
+    const result = await newer
+    expect(result).toEqual({ issues: mounted.value.issuesFor('email') })
+    await expect(older).resolves.toEqual(result)
     resolvers.get('older')?.({ issues: [{ message: 'Stale', path: ['email'] }] })
     await Promise.resolve()
     expect(mounted.value.errors.value).toEqual(['Current'])
@@ -351,7 +365,7 @@ describe('targeted validation', () => {
     const full = mounted.value.validate()
 
     await expect(full).resolves.toMatchObject({ success: false })
-    await expect(target).resolves.toEqual({ success: false, issues: mounted.value.issuesFor('email') })
+    await expect(target).resolves.toEqual({ issues: mounted.value.issuesFor('email') })
     resolveTarget({ issues: [{ message: 'Stale target', path: ['email'] }] })
     await Promise.resolve()
     expect(mounted.value.errors.value).toEqual(['Full issue'])
@@ -421,7 +435,7 @@ describe('targeted validation', () => {
     showChild.value = false
     await nextTick()
 
-    await expect(target).resolves.toEqual({ success: true, issues: [] })
+    await expect(target).resolves.toEqual({ issues: [] })
     expect(root.isValidating.value).toBe(false)
   })
 

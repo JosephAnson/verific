@@ -42,6 +42,10 @@ export type ValidationResult
   = | { readonly success: true, readonly issues: readonly ValidationIssue[] }
     | { readonly success: false, readonly issues: readonly ValidationIssue[] }
 
+export interface TargetValidationResult {
+  readonly issues: readonly ValidationIssue[]
+}
+
 export type RegistrationResult<Output>
   = | { readonly status: 'idle' }
     | { readonly status: 'valid', readonly value: Output }
@@ -56,7 +60,7 @@ export interface ValidationGroup<Path = PropertyKey | readonly PropertyKey[]> {
   errorsFor: (path: Path) => readonly string[]
   errorFor: (path: Path) => string | undefined
   validate: () => Promise<ValidationResult>
-  validateFor: (path: Path) => Promise<ValidationResult>
+  validateFor: (path: Path) => Promise<TargetValidationResult>
 }
 
 export interface ValidationController<Schema extends StandardSchemaV1>
@@ -97,7 +101,7 @@ interface InternalValidationScope {
     creatingScope: boolean,
   ) => { readonly id: symbol, remove: () => void }
   validate: () => Promise<ValidationResult>
-  validateFor: (path: readonly PropertyKey[]) => Promise<ValidationResult>
+  validateFor: (path: readonly PropertyKey[]) => Promise<TargetValidationResult>
 }
 
 interface CancellationSignal {
@@ -123,14 +127,19 @@ type ValidationOutcome
 type CompletedValidationOutcome = Extract<ValidationOutcome, { readonly id: symbol }>
 type CancelledValidationOutcome = Exclude<ValidationOutcome, CompletedValidationOutcome>
 
-interface ValidationAuthority {
+interface ValidationWork {
   readonly signal: CancellationSignal
+}
+
+interface ValidationAuthority extends ValidationWork {
   readonly promise: Promise<ValidationResult>
   replacement?: Promise<ValidationResult>
 }
 
-interface TargetValidationAuthority extends ValidationAuthority {
+interface TargetValidationAuthority extends ValidationWork {
   readonly path: readonly PropertyKey[]
+  readonly promise: Promise<TargetValidationResult>
+  replacement?: Promise<TargetValidationResult>
 }
 
 const localScopes = new WeakMap<object, InternalValidationScope>()
@@ -206,7 +215,7 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
     messagePrefix: options.messagePrefix,
     describeIssue: options.describeIssue,
   }
-  const pendingWork = new Set<ValidationAuthority>()
+  const pendingWork = new Set<ValidationWork>()
   let activeFull: ValidationAuthority | undefined
   let latestFull: ValidationAuthority | undefined
   const activeTargets: TargetValidationAuthority[] = []
@@ -293,9 +302,9 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
     return authority.promise
   }
 
-  function validateFor(path: readonly PropertyKey[]): Promise<ValidationResult> {
+  function validateFor(path: readonly PropertyKey[]): Promise<TargetValidationResult> {
     const resolvedPath = Object.freeze([...path])
-    const deferred = createDeferred<ValidationResult>()
+    const deferred = createDeferred<TargetValidationResult>()
     const authority: TargetValidationAuthority = {
       path: resolvedPath,
       signal: createCancellationSignal(),
@@ -376,7 +385,7 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
     }
   }
 
-  async function runTargetValidation(authority: TargetValidationAuthority): Promise<ValidationResult> {
+  async function runTargetValidation(authority: TargetValidationAuthority): Promise<TargetValidationResult> {
     try {
       const blockingFull = activeFull
       if (blockingFull) {
@@ -444,9 +453,7 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
       if (authority.replacement) {
         return authority.replacement
       }
-      return selectedIssues.length === 0
-        ? { success: true, issues: selectedIssues }
-        : { success: false, issues: selectedIssues }
+      return { issues: selectedIssues }
     }
     catch (reason) {
       if (authority.replacement) {
@@ -460,12 +467,12 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
     }
   }
 
-  function beginWork(authority: ValidationAuthority): void {
+  function beginWork(authority: ValidationWork): void {
     pendingWork.add(authority)
     isValidating.value = true
   }
 
-  function finishWork(authority: ValidationAuthority): void {
+  function finishWork(authority: ValidationWork): void {
     pendingWork.delete(authority)
     isValidating.value = pendingWork.size > 0
   }
@@ -490,7 +497,7 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
     }
   }
 
-  async function projectLatestFull(authority: ValidationAuthority, path: readonly PropertyKey[]): Promise<ValidationResult> {
+  async function projectLatestFull(authority: ValidationAuthority, path: readonly PropertyKey[]): Promise<TargetValidationResult> {
     try {
       return await projectValidation(authority.promise, path)
     }
@@ -629,10 +636,10 @@ function pathStartsWith(path: readonly PropertyKey[], prefix: readonly PropertyK
   return prefix.length <= path.length && prefix.every((segment, index) => Object.is(segment, path[index]))
 }
 
-function projectValidation(validation: Promise<ValidationResult>, path: readonly PropertyKey[]): Promise<ValidationResult> {
+function projectValidation(validation: Promise<ValidationResult>, path: readonly PropertyKey[]): Promise<TargetValidationResult> {
   return validation.then((result) => {
     const issues = result.issues.filter(issue => pathsEqual(issue.path, path))
-    return issues.length === 0 ? { success: true, issues } : { success: false, issues }
+    return { issues }
   })
 }
 
