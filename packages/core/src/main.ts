@@ -11,6 +11,7 @@ export type {
   ValidationPath,
   ValidationResult,
   ValidationScopeOptions,
+  ValidationState,
 } from './composables/useValidation'
 export type {
   DiagnosticMessageAdapter,

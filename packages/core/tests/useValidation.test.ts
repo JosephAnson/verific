@@ -1,8 +1,9 @@
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 import type { App, Component } from 'vue'
-import type { DiagnosticMessageAdapter, IssueNormaliser, MessageContext, TargetValidationResult, ValidationGroup, ValidationIssue, ValidationResult } from '../src/main'
+import type { DiagnosticMessageAdapter, IssueNormaliser, MessageContext, TargetValidationResult, ValidationController, ValidationGroup, ValidationIssue, ValidationResult, ValidationState } from '../src/main'
+import process from 'node:process'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { computed, createApp, defineComponent, h, nextTick, reactive, ref, watch } from 'vue'
+import { computed, createApp, customRef, defineComponent, h, isReadonly, nextTick, reactive, ref, shallowRef, watch } from 'vue'
 import { createVerific, useValidation } from '../src/main'
 import { loadValibot, loadZod, valibotVersion, zodVersion } from './fixtures/pinnedValidators'
 
@@ -815,6 +816,1602 @@ describe('validation lifecycle', () => {
   it('validates an empty scope successfully', async () => {
     const mounted = mountValidation(() => useValidation(), false)
     await expect(mounted.value.validate()).resolves.toEqual({ success: true, issues: [] })
+  })
+})
+
+describe('form state', () => {
+  it('derives aggregate and exact dirty state reactively and becomes pristine after reversion', () => {
+    const model = reactive({ email: '', profile: { name: '' } })
+    const schema = createSchema<typeof model>('test', value => ({ value }))
+    const mounted = mountValidation(() => useValidation(schema, model), false)
+
+    expect(mounted.value.state.value).toEqual({
+      dirty: false,
+      touched: false,
+      validated: false,
+      stale: false,
+      validating: false,
+    })
+    expect(mounted.value.stateFor('email')).toEqual(mounted.value.state.value)
+
+    model.profile.name = 'Ada'
+
+    expect(mounted.value.state.value.dirty).toBe(true)
+    expect(mounted.value.stateFor('email').dirty).toBe(false)
+    expect(mounted.value.stateFor(['profile', 'name']).dirty).toBe(true)
+
+    model.profile.name = ''
+
+    expect(mounted.value.state.value.dirty).toBe(false)
+    expect(mounted.value.stateFor(['profile', 'name']).dirty).toBe(false)
+  })
+
+  it('captures the baseline before the first state observation', () => {
+    const email = ref('initial@example.com')
+    const schema = createSchema<{ email: string }>('test', value => ({ value }))
+    const mounted = mountValidation(() => useValidation(schema, { email }), false)
+
+    email.value = 'edited@example.com'
+
+    expect(mounted.value.state.value.dirty).toBe(true)
+    expect(mounted.value.stateFor('email').dirty).toBe(true)
+  })
+
+  it('does not execute an accessor while adding an observed registration', async () => {
+    let getterCalls = 0
+    const validator = vi.fn((value: { email: string }) => ({ value }))
+    const schema = createSchema<{ email: string }>('test', validator)
+    const model = {
+      get email() {
+        getterCalls++
+        return 'safe@example.com'
+      },
+    }
+    const mounted = mountValidation(() => {
+      const root = useValidation()
+      watch(() => root.state.value.dirty, () => {}, { flush: 'sync' })
+      const child = useValidation(schema, model)
+      return { child, root }
+    }, false)
+
+    expect(getterCalls).toBe(0)
+    expect(mounted.value.root.state.value.dirty).toBe(false)
+    expect(getterCalls).toBe(1)
+
+    const callsBeforeValidation = getterCalls
+    await mounted.value.root.validate()
+    expect(getterCalls).toBeGreaterThan(callsBeforeValidation)
+    expect(validator).toHaveBeenCalledOnce()
+  })
+
+  it('rolls back a joining registration when observed-state invalidation throws', async () => {
+    const observationFailure = new Error('Observed state failed')
+    let throwOnRead = false
+    const retainedValidator = vi.fn((value: { email: string }) => ({ value }))
+    const leakedValidator = vi.fn((value: { code: string }) => ({ value }))
+    const retainedSchema = createSchema<{ email: string }>('test', retainedValidator)
+    const leakedSchema = createSchema<{ code: string }>('test', leakedValidator)
+    const model = {
+      get email() {
+        if (throwOnRead) {
+          throw observationFailure
+        }
+        return 'safe@example.com'
+      },
+    }
+    const mounted = mountValidation(() => {
+      const retained = useValidation(retainedSchema, model)
+      const root = useValidation()
+      watch(() => root.state.value.dirty, () => {}, { flush: 'sync' })
+      throwOnRead = true
+      let registrationFailure: unknown
+      try {
+        useValidation(leakedSchema, { code: '' })
+      }
+      catch (reason) {
+        registrationFailure = reason
+      }
+      throwOnRead = false
+      return { registrationFailure, retained, root }
+    }, false)
+
+    expect(mounted.value.registrationFailure).toBe(observationFailure)
+    await expect(mounted.value.root.validate()).resolves.toEqual({ success: true, issues: [] })
+    expect(retainedValidator).toHaveBeenCalledOnce()
+    expect(leakedValidator).not.toHaveBeenCalled()
+  })
+
+  it('returns a rejected promise and rolls back full activity when a sync state observer throws', async () => {
+    const observationFailure = new Error('Full state observation failed')
+    let throwOnRead = false
+    const validator = vi.fn((value: { email: string }) => ({ value }))
+    const schema = createSchema<{ email: string }>('test', validator)
+    const model = {
+      get email() {
+        if (throwOnRead) {
+          throw observationFailure
+        }
+        return 'safe@example.com'
+      },
+    }
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, model)
+      watch(() => validation.state.value.validating, () => {}, { flush: 'sync' })
+      return validation
+    }, false)
+
+    throwOnRead = true
+    let validation!: Promise<ValidationResult>
+    expect(() => {
+      validation = mounted.value.validate()
+    }).not.toThrow()
+    await expect(validation).rejects.toBe(observationFailure)
+
+    throwOnRead = false
+    expect(mounted.value.isValidating.value).toBe(false)
+    expect(mounted.value.state.value.validating).toBe(false)
+    expect(mounted.value.stateFor('email').validating).toBe(false)
+    await expect(mounted.value.validate()).resolves.toEqual({ success: true, issues: [] })
+    expect(validator).toHaveBeenCalledOnce()
+  })
+
+  it('returns a rejected promise and rolls back exact activity when a sync state observer throws', async () => {
+    const observationFailure = new Error('Exact state observation failed')
+    let throwOnRead = false
+    const validator = vi.fn((value: { email: string }) => ({ value }))
+    const schema = createSchema<{ email: string }>('test', validator)
+    const model = {
+      get email() {
+        if (throwOnRead) {
+          throw observationFailure
+        }
+        return 'safe@example.com'
+      },
+    }
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, model)
+      watch(() => validation.stateFor('email').validating, () => {}, { flush: 'sync' })
+      return validation
+    }, false)
+
+    throwOnRead = true
+    let validation!: Promise<TargetValidationResult>
+    expect(() => {
+      validation = mounted.value.validateAt('email')
+    }).not.toThrow()
+    await expect(validation).rejects.toBe(observationFailure)
+
+    throwOnRead = false
+    expect(mounted.value.isValidating.value).toBe(false)
+    expect(mounted.value.state.value.validating).toBe(false)
+    expect(mounted.value.stateFor('email').validating).toBe(false)
+    await expect(mounted.value.validateAt('email')).resolves.toEqual({ issues: [] })
+    expect(validator).toHaveBeenCalledOnce()
+  })
+
+  it('compares cyclic and shared structures, symbols, property presence, arrays and non-plain values', () => {
+    const field = Symbol('field')
+    const shared = { value: 'shared' }
+    const originalDate = new Date('2026-01-01T00:00:00.000Z')
+    const items: Array<undefined | { value: string }> = [undefined]
+    const raw: {
+      [field]: string
+      optional?: undefined
+      items: Array<undefined | { value: string }>
+      first: { value: string }
+      second: { value: string }
+      date: Date
+      self?: unknown
+    } = {
+      [field]: '',
+      items,
+      first: shared,
+      second: shared,
+      date: originalDate,
+    }
+    raw.self = raw
+    const model = reactive(raw)
+    const schema = createSchema<typeof raw>('test', value => ({ value }))
+    const mounted = mountValidation(() => useValidation(schema, model), false)
+
+    expect(mounted.value.state.value.dirty).toBe(false)
+
+    model.optional = undefined
+    expect(mounted.value.state.value.dirty).toBe(true)
+    delete model.optional
+    expect(mounted.value.state.value.dirty).toBe(false)
+
+    model.items[0] = { value: 'item' }
+    expect(mounted.value.state.value.dirty).toBe(true)
+    model.items[0] = undefined
+    expect(mounted.value.state.value.dirty).toBe(false)
+
+    model.second = { value: 'shared' }
+    expect(mounted.value.state.value.dirty).toBe(true)
+    model.second = model.first
+    expect(mounted.value.state.value.dirty).toBe(false)
+
+    model[field] = 'changed'
+    expect(mounted.value.stateFor(field).dirty).toBe(true)
+    model[field] = ''
+    expect(mounted.value.stateFor(field).dirty).toBe(false)
+
+    model.date.setUTCFullYear(2027)
+    expect(mounted.value.stateFor('date').dirty).toBe(false)
+    model.date = new Date(model.date)
+    expect(mounted.value.state.value.dirty).toBe(true)
+  })
+
+  it('preserves sparse arrays, length and own string and symbol properties in snapshots', async () => {
+    const marker = Symbol('marker')
+    type Items = Array<string | undefined> & { note: string, [marker]: string }
+    const items = [] as unknown as Items
+    items.length = 2
+    Object.defineProperty(items, 'note', {
+      configurable: true,
+      enumerable: false,
+      value: 'baseline',
+      writable: true,
+    })
+    items[marker] = 'baseline'
+    const model = reactive({ items })
+    const validator = vi.fn((value: { items: Items }) => ({ value }))
+    const schema = createSchema<{ items: Items }>('test', validator)
+    const mounted = mountValidation(() => useValidation(schema, model), false)
+
+    expect(mounted.value.state.value.dirty).toBe(false)
+    await mounted.value.validate()
+    const captured = validator.mock.calls[0]![0].items
+    expect(captured).toHaveLength(2)
+    expect(0 in captured).toBe(false)
+    expect(captured.note).toBe('baseline')
+    expect(Object.getOwnPropertyDescriptor(captured, 'note')?.enumerable).toBe(false)
+    expect(captured[marker]).toBe('baseline')
+
+    model.items[0] = undefined
+    expect(mounted.value.stateFor(['items', 0]).dirty).toBe(true)
+    expect(mounted.value.state.value.dirty).toBe(true)
+    delete model.items[0]
+    expect(mounted.value.state.value.dirty).toBe(false)
+
+    model.items.length = 3
+    expect(mounted.value.state.value.dirty).toBe(true)
+    model.items.length = 2
+    expect(mounted.value.state.value.dirty).toBe(false)
+
+    model.items.note = 'changed'
+    expect(mounted.value.state.value.dirty).toBe(true)
+    model.items.note = 'baseline'
+    expect(mounted.value.state.value.dirty).toBe(false)
+
+    model.items[marker] = 'changed'
+    expect(mounted.value.state.value.dirty).toBe(true)
+    model.items[marker] = 'baseline'
+    expect(mounted.value.state.value.dirty).toBe(false)
+  })
+
+  it('tracks schema-observable enumerability changes in dirty and stale state', async () => {
+    const model = reactive({ details: { note: 'baseline' } })
+    const validator = vi.fn((value: typeof model) => ({ value }))
+    const schema = createSchema<typeof model>('test', validator)
+    const mounted = mountValidation(() => useValidation(schema, model), false)
+
+    await mounted.value.validate()
+    expect(Object.keys(validator.mock.calls[0]![0].details)).toEqual(['note'])
+    expect(mounted.value.state.value).toMatchObject({ dirty: false, stale: false })
+    expect(isReadonly(mounted.value.state)).toBe(true)
+
+    Object.defineProperty(model.details, 'note', { enumerable: false })
+
+    expect(mounted.value.state.value).toMatchObject({ dirty: true, stale: true })
+    expect(mounted.value.stateFor('details')).toMatchObject({ dirty: true, stale: true })
+
+    await mounted.value.validate()
+    expect(Object.keys(validator.mock.calls[1]![0].details)).toEqual([])
+    expect(mounted.value.state.value).toMatchObject({ dirty: true, stale: false })
+    expect(mounted.value.stateFor('details')).toMatchObject({ dirty: true, stale: false })
+  })
+
+  it('records touch explicitly at resolved paths and removes disposed contributions', async () => {
+    const field = Symbol('field')
+    const showChild = ref(true)
+    const schema = createSchema<{ postcode: string, [field]: string }>('test', value => ({ value }))
+    let root!: ValidationGroup
+    let child!: ReturnType<typeof useValidation<typeof schema>>
+    const Child = defineComponent({
+      setup() {
+        child = useValidation(schema, { postcode: '', [field]: '' }, { at: ['shipping'] })
+        return () => null
+      },
+    })
+    const Parent = defineComponent({
+      setup() {
+        root = useValidation()
+        return () => showChild.value ? h(Child) : null
+      },
+    })
+    mountComponent(Parent, false)
+
+    await child.validateAt('postcode')
+    expect(child.stateFor('postcode').touched).toBe(false)
+
+    root.touch(['billing', 'postcode'])
+    expect(root.state.value.touched).toBe(false)
+
+    child.touch([])
+    child.touch('postcode')
+    child.touch(field)
+    expect(child.stateFor([]).touched).toBe(true)
+    expect(root.stateFor(['shipping']).touched).toBe(true)
+    expect(child.stateFor('postcode').touched).toBe(true)
+    expect(root.stateFor(['shipping', 'postcode']).touched).toBe(true)
+    expect(root.stateFor(['shipping', field]).touched).toBe(true)
+    expect(root.state.value.touched).toBe(true)
+
+    showChild.value = false
+    await nextTick()
+
+    expect(root.stateFor(['shipping', 'postcode']).touched).toBe(false)
+    expect(root.state.value.touched).toBe(false)
+  })
+
+  it('tracks full and exact validation history, conservative staleness and reversion', async () => {
+    const firstSchema = createSchema<{ email: string, password: string }>('test', value => ({ value }))
+    const secondSchema = createSchema<{ email: string, password: string }>('test', value => ({ value }))
+    const schema = shallowRef(firstSchema)
+    const model = reactive({ email: '', password: '' })
+    const mounted = mountValidation(() => useValidation(schema, model), false)
+
+    await mounted.value.validateAt('email')
+
+    expect(mounted.value.state.value.validated).toBe(false)
+    expect(mounted.value.stateFor('email')).toMatchObject({ validated: true, stale: false, touched: false })
+    expect(mounted.value.stateFor('password')).toMatchObject({ validated: false, stale: false })
+    expect(mounted.value.result.value).toEqual({ status: 'idle' })
+
+    model.password = 'changed sibling'
+    expect(mounted.value.stateFor('email').stale).toBe(true)
+    model.password = ''
+    expect(mounted.value.stateFor('email').stale).toBe(false)
+
+    await mounted.value.validate()
+    expect(mounted.value.state.value).toMatchObject({ validated: true, stale: false })
+    expect(mounted.value.stateFor('password')).toMatchObject({ validated: true, stale: false })
+
+    schema.value = secondSchema
+    expect(mounted.value.state.value.stale).toBe(true)
+    expect(mounted.value.stateFor('email').stale).toBe(true)
+    schema.value = firstSchema
+    expect(mounted.value.state.value.stale).toBe(false)
+    expect(mounted.value.stateFor('email').stale).toBe(false)
+  })
+
+  it('marks a committed async snapshot stale when the model changes in flight', async () => {
+    let resolve!: (result: StandardSchemaV1.Result<{ email: string }>) => void
+    const email = ref('captured')
+    const schema = createSchema<{ email: string }>('test', () => new Promise((resume) => {
+      resolve = resume
+    }))
+    const mounted = mountValidation(() => useValidation(schema, { email }), false)
+
+    const validation = mounted.value.validate()
+    email.value = 'changed'
+    resolve({ value: { email: 'captured' } })
+    await validation
+
+    expect(mounted.value.state.value).toMatchObject({ validated: true, stale: true })
+    expect(mounted.value.stateFor('email')).toMatchObject({ validated: true, stale: true })
+    email.value = 'captured'
+    expect(mounted.value.state.value.stale).toBe(false)
+  })
+
+  it('isolates validation freshness from identity-schema output mutation', async () => {
+    const model = reactive({ profile: { name: 'Ada' } })
+    const schema = createSchema<typeof model>('test', value => ({ value }))
+    const mounted = mountValidation(() => useValidation(schema, model), false)
+
+    await mounted.value.validate()
+    const result = mounted.value.result.value
+    expect(result.status).toBe('valid')
+    if (result.status !== 'valid') {
+      return
+    }
+
+    result.value.profile.name = 'Mutated output'
+
+    expect(model.profile.name).toBe('Ada')
+    expect(mounted.value.state.value.stale).toBe(false)
+    expect(mounted.value.stateFor(['profile', 'name']).stale).toBe(false)
+
+    model.profile.name = 'Mutated output'
+    expect(mounted.value.state.value.stale).toBe(true)
+    model.profile.name = 'Ada'
+    expect(mounted.value.state.value.stale).toBe(false)
+  })
+
+  it('invalidates validation history when matching registrations are added or disposed', async () => {
+    const showChild = ref(false)
+    const schema = createSchema<{ email: string }>('test', value => ({ value }))
+    let root!: ReturnType<typeof useValidation<typeof schema>>
+    const Child = defineComponent({
+      setup() {
+        useValidation(schema, { email: '' })
+        return () => null
+      },
+    })
+    const Parent = defineComponent({
+      setup() {
+        root = useValidation(schema, { email: '' })
+        return () => showChild.value ? h(Child) : null
+      },
+    })
+    mountComponent(Parent, false)
+    await root.validate()
+
+    showChild.value = true
+    await nextTick()
+    expect(root.state.value).toMatchObject({ validated: true, stale: true })
+    expect(root.stateFor('email')).toMatchObject({ validated: true, stale: true })
+
+    await root.validate()
+    expect(root.state.value.stale).toBe(false)
+    showChild.value = false
+    await nextTick()
+    expect(root.state.value.stale).toBe(true)
+    expect(root.stateFor('email').stale).toBe(true)
+  })
+
+  it('publishes matching exact activity with aggregate activity at full validation start', async () => {
+    let resolveValidation!: (result: StandardSchemaV1.Result<{ email: string }>) => void
+    const observations: Array<{
+      aggregateValidating: boolean
+      exactValidating: boolean
+      legacyValidating: boolean
+    }> = []
+    const schema = createSchema<{ email: string }>('test', () => new Promise((resolve) => {
+      resolveValidation = resolve
+    }))
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, { email: '' })
+      watch(
+        () => validation.state.value.validating,
+        (aggregateValidating) => {
+          observations.push({
+            aggregateValidating,
+            exactValidating: validation.stateFor('email').validating,
+            legacyValidating: validation.isValidating.value,
+          })
+        },
+        { flush: 'sync' },
+      )
+      return validation
+    }, false)
+
+    const full = mounted.value.validate()
+
+    expect(observations).toEqual([{
+      aggregateValidating: true,
+      exactValidating: true,
+      legacyValidating: true,
+    }])
+
+    resolveValidation({ value: { email: '' } })
+    await full
+    expect(observations).toEqual([
+      { aggregateValidating: true, exactValidating: true, legacyValidating: true },
+      { aggregateValidating: false, exactValidating: false, legacyValidating: false },
+    ])
+  })
+
+  it('keeps matching exact activity continuous across full validation supersession', async () => {
+    const resolvers: Array<(result: StandardSchemaV1.Result<{ email: string }>) => void> = []
+    const observations: Array<{
+      aggregateValidating: boolean
+      exactValidating: boolean
+      legacyValidating: boolean
+    }> = []
+    const schema = createSchema<{ email: string }>('test', () => new Promise((resolve) => {
+      resolvers.push(resolve)
+    }))
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, { email: '' })
+      watch(
+        () => validation.stateFor('email').validating,
+        (exactValidating) => {
+          observations.push({
+            aggregateValidating: validation.state.value.validating,
+            exactValidating,
+            legacyValidating: validation.isValidating.value,
+          })
+        },
+        { flush: 'sync' },
+      )
+      return validation
+    }, false)
+
+    const superseded = mounted.value.validate()
+    expect(observations).toEqual([{
+      aggregateValidating: true,
+      exactValidating: true,
+      legacyValidating: true,
+    }])
+
+    const authoritative = mounted.value.validate()
+    expect(observations).toEqual([{
+      aggregateValidating: true,
+      exactValidating: true,
+      legacyValidating: true,
+    }])
+    expect(mounted.value.state.value.validating).toBe(true)
+    expect(mounted.value.stateFor('email').validating).toBe(true)
+    expect(mounted.value.isValidating.value).toBe(true)
+
+    resolvers[1]?.({ value: { email: '' } })
+    await Promise.all([superseded, authoritative])
+    expect(observations).toEqual([
+      { aggregateValidating: true, exactValidating: true, legacyValidating: true },
+      { aggregateValidating: false, exactValidating: false, legacyValidating: false },
+    ])
+  })
+
+  it('reports exact targeted and full validation activity independently', async () => {
+    const resolvers: Array<(result: StandardSchemaV1.Result<{ email: string, password: string }>) => void> = []
+    const schema = createSchema<{ email: string, password: string }>('test', () => new Promise((resolve) => {
+      resolvers.push(resolve)
+    }))
+    const mounted = mountValidation(() => useValidation(schema, { email: '', password: '' }), false)
+
+    const email = mounted.value.validateAt('email')
+    expect(mounted.value.state.value.validating).toBe(true)
+    expect(mounted.value.stateFor('email').validating).toBe(true)
+    expect(mounted.value.stateFor('password').validating).toBe(false)
+
+    const password = mounted.value.validateAt('password')
+    expect(mounted.value.stateFor('email').validating).toBe(true)
+    expect(mounted.value.stateFor('password').validating).toBe(true)
+    resolvers[0]?.({ value: { email: '', password: '' } })
+    resolvers[1]?.({ value: { email: '', password: '' } })
+    await Promise.all([email, password])
+
+    const full = mounted.value.validate()
+    expect(mounted.value.state.value.validating).toBe(true)
+    expect(mounted.value.stateFor('email').validating).toBe(true)
+    expect(mounted.value.stateFor('password').validating).toBe(true)
+    resolvers[2]?.({ value: { email: '', password: '' } })
+    await full
+    expect(mounted.value.state.value.validating).toBe(false)
+  })
+
+  it('resets values, baselines, issues, results, touch and validation history atomically', async () => {
+    const email = ref('')
+    const schema = createSchema<{ email: string }>('test', value => value.email
+      ? { value }
+      : { issues: [{ message: 'Required', path: ['email'] }] })
+    const mounted = mountValidation(() => useValidation(schema, { email }), false)
+    await mounted.value.validate()
+    mounted.value.touch('email')
+    email.value = 'saved@example.com'
+
+    mounted.value.resetState()
+
+    expect(email.value).toBe('saved@example.com')
+    expect(mounted.value.issues.value).toEqual([])
+    expect(mounted.value.result.value).toEqual({ status: 'idle' })
+    expect(mounted.value.state.value).toEqual({
+      dirty: false,
+      touched: false,
+      validated: false,
+      stale: false,
+      validating: false,
+    })
+    email.value = 'next@example.com'
+    expect(mounted.value.stateFor('email').dirty).toBe(true)
+    email.value = 'saved@example.com'
+    expect(mounted.value.stateFor('email').dirty).toBe(false)
+  })
+
+  it('publishes reset results and validation activity in one synchronous transition', async () => {
+    let pending = false
+    let resolvePending!: (result: StandardSchemaV1.Result<{ email: string }>) => void
+    const observations: Array<{
+      result: 'idle'
+      aggregateValidating: boolean
+      exactValidating: boolean
+      legacyValidating: boolean
+    }> = []
+    const schema = createSchema<{ email: string }>('test', value => pending
+      ? new Promise((resolve) => { resolvePending = resolve })
+      : { value })
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, { email: 'valid@example.com' })
+      watch(
+        () => validation.result.value,
+        (result) => {
+          if (result.status === 'idle') {
+            observations.push({
+              result: result.status,
+              aggregateValidating: validation.state.value.validating,
+              exactValidating: validation.stateFor('email').validating,
+              legacyValidating: validation.isValidating.value,
+            })
+          }
+        },
+        { flush: 'sync' },
+      )
+      return validation
+    }, false)
+
+    await mounted.value.validate()
+    pending = true
+    const validation = mounted.value.validate()
+    expect(mounted.value.state.value.validating).toBe(true)
+    expect(mounted.value.stateFor('email').validating).toBe(true)
+    expect(mounted.value.isValidating.value).toBe(true)
+
+    mounted.value.resetState()
+
+    expect(observations).toEqual([{
+      result: 'idle',
+      aggregateValidating: false,
+      exactValidating: false,
+      legacyValidating: false,
+    }])
+    await expect(validation).rejects.toMatchObject({ name: 'AbortError' })
+
+    resolvePending({ issues: [{ message: 'Late', path: ['email'] }] })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(mounted.value.result.value).toEqual({ status: 'idle' })
+    expect(observations).toHaveLength(1)
+  })
+
+  it('leaves all state and authority intact when reset capture fails', async () => {
+    const captureFailure = new Error('Reset capture failed')
+    let value = ''
+    let throwOnRead = false
+    let resolvePending!: (result: StandardSchemaV1.Result<{ email: string }>) => void
+    let pending = false
+    const model = {
+      get email() {
+        if (throwOnRead) {
+          throw captureFailure
+        }
+        return value
+      },
+    }
+    const schema = createSchema<{ email: string }>('test', _input => pending
+      ? new Promise((resolve) => { resolvePending = resolve })
+      : { issues: [{ message: 'Original', path: ['email'] }] })
+    const mounted = mountValidation(() => useValidation(schema, model), false)
+    await mounted.value.validate()
+    mounted.value.touch('email')
+    value = 'changed'
+    pending = true
+    const validation = mounted.value.validate()
+    throwOnRead = true
+
+    expect(() => mounted.value.resetState()).toThrow(captureFailure)
+
+    throwOnRead = false
+    expect(mounted.value.state.value).toMatchObject({ dirty: true, touched: true, validated: true, validating: true })
+    expect(mounted.value.errorsFor('email')).toEqual(['Original'])
+    resolvePending({ value: { email: 'changed' } })
+    await validation
+    expect(mounted.value.result.value).toEqual({ status: 'valid', value: { email: 'changed' } })
+  })
+
+  it('blocks re-entrant touch and validation when reset capture fails', async () => {
+    const captureFailure = new Error('Later reset capture failed')
+    let resetCapture = false
+    let validation!: ReturnType<typeof useValidation<typeof schema>>
+    let reentrantValidation!: Promise<TargetValidationResult>
+    let resolvePending!: (result: StandardSchemaV1.Result<{ email: string, code: string }>) => void
+    const model = {
+      get email() {
+        if (resetCapture) {
+          validation.touch('email')
+          reentrantValidation = validation.validateAt('email')
+        }
+        return 'safe@example.com'
+      },
+      get code() {
+        if (resetCapture) {
+          throw captureFailure
+        }
+        return 'ready'
+      },
+    }
+    const schema = createSchema<{ email: string, code: string }>('test', () => new Promise((resolve) => {
+      resolvePending = resolve
+    }))
+    const mounted = mountValidation(() => {
+      validation = useValidation(schema, model)
+      return validation
+    }, false)
+    const pending = mounted.value.validate()
+
+    expect(mounted.value.state.value).toMatchObject({ touched: false, validating: true })
+    resetCapture = true
+    expect(() => mounted.value.resetState()).toThrow(captureFailure)
+    resetCapture = false
+
+    expect(mounted.value.state.value).toMatchObject({ touched: false, validating: true })
+    expect(mounted.value.stateFor('email')).toMatchObject({ touched: false, validating: true })
+    await expect(reentrantValidation).rejects.toBe(captureFailure)
+
+    resolvePending({ value: { email: 'safe@example.com', code: 'ready' } })
+    await expect(pending).resolves.toEqual({ success: true, issues: [] })
+    expect(mounted.value.state.value).toMatchObject({ touched: false, validated: true, validating: false })
+  })
+
+  it('rejects validation started synchronously during reset publication', async () => {
+    const schema = createSchema<{ email: string }>('test', value => ({ value }))
+    let blockedValidation!: Promise<TargetValidationResult>
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, { email: 'safe@example.com' })
+      let validateOnReset = false
+      watch(
+        () => validation.result.value,
+        (result) => {
+          if (validateOnReset && result.status === 'idle') {
+            validateOnReset = false
+            blockedValidation = validation.validateAt('email')
+          }
+        },
+        { flush: 'sync' },
+      )
+      return {
+        ...validation,
+        armResetValidation: () => { validateOnReset = true },
+      }
+    }, false)
+
+    await mounted.value.validate()
+    mounted.value.armResetValidation()
+    mounted.value.resetState()
+
+    await expect(blockedValidation).rejects.toMatchObject({ name: 'AbortError' })
+    expect(mounted.value.state.value).toMatchObject({ validated: false, validating: false })
+    expect(mounted.value.stateFor('email')).toMatchObject({ validated: false, validating: false })
+  })
+
+  it('keeps a newer re-entrant full authority when an older start observer throws', async () => {
+    const observationFailure = new Error('Older start observation failed')
+    let validation!: ReturnType<typeof useValidation<typeof schema>>
+    let newer!: Promise<ValidationResult>
+    let startNewer = false
+    let resolveNewer!: (result: StandardSchemaV1.Result<{ email: string }>) => void
+    const model = {
+      get email() {
+        if (startNewer) {
+          startNewer = false
+          newer = validation.validate()
+          throw observationFailure
+        }
+        return 'safe@example.com'
+      },
+    }
+    const schema = createSchema<{ email: string }>('test', () => new Promise((resolve) => {
+      resolveNewer = resolve
+    }))
+    const mounted = mountValidation(() => {
+      validation = useValidation(schema, model)
+      watch(() => validation.state.value.validating, () => {}, { flush: 'sync' })
+      return validation
+    }, false)
+
+    startNewer = true
+    let older!: Promise<ValidationResult>
+    expect(() => {
+      older = mounted.value.validate()
+    }).not.toThrow()
+    expect(mounted.value.state.value.validating).toBe(true)
+
+    resolveNewer({ value: { email: 'safe@example.com' } })
+    await expect(newer).resolves.toEqual({ success: true, issues: [] })
+    await expect(older).resolves.toEqual({ success: true, issues: [] })
+    expect(mounted.value.state.value.validating).toBe(false)
+  })
+
+  it('also supersedes the full authority that preceded a failed re-entrant start', async () => {
+    const observationFailure = new Error('Middle full start observation failed')
+    const resolvers = new Map<string, (result: StandardSchemaV1.Result<{ email: string }>) => void>()
+    let email = 'oldest'
+    let validation!: ValidationGroup<'email'>
+    let newest!: Promise<ValidationResult>
+    let startNewest = false
+    const model = {
+      get email() {
+        if (startNewest) {
+          startNewest = false
+          newest = validation.validate()
+          throw observationFailure
+        }
+        return email
+      },
+    }
+    const schema = createSchema<{ email: string }>('test', value => new Promise((resolve) => {
+      resolvers.set(value.email, resolve)
+    }))
+    const mounted = mountValidation(() => {
+      validation = useValidation(schema, model)
+      watch(() => validation.state.value.validating, () => {}, { flush: 'sync' })
+      return validation
+    }, false)
+
+    const oldest = mounted.value.validate()
+    email = 'newest'
+    startNewest = true
+    let adopting!: Promise<ValidationResult>
+    expect(() => {
+      adopting = mounted.value.validate()
+    }).not.toThrow()
+
+    resolvers.get('newest')?.({ value: { email: 'newest' } })
+    await expect(Promise.all([oldest, adopting, newest])).resolves.toEqual([
+      { success: true, issues: [] },
+      { success: true, issues: [] },
+      { success: true, issues: [] },
+    ])
+    expect(mounted.value.state.value.validating).toBe(false)
+
+    resolvers.get('oldest')?.({ issues: [{ message: 'Late oldest', path: ['email'] }] })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(mounted.value.issues.value).toEqual([])
+  })
+
+  it('also supersedes the same-path target that preceded a failed re-entrant start', async () => {
+    const observationFailure = new Error('Middle target start observation failed')
+    const resolvers: Array<(result: StandardSchemaV1.Result<{ email: string }>) => void> = []
+    let validation!: ValidationGroup<'email'>
+    let newest!: Promise<TargetValidationResult>
+    let startNewest = false
+    const model = {
+      get email() {
+        if (startNewest) {
+          startNewest = false
+          newest = validation.validateAt('email')
+          throw observationFailure
+        }
+        return 'safe@example.com'
+      },
+    }
+    const schema = createSchema<{ email: string }>('test', () => new Promise((resolve) => {
+      resolvers.push(resolve)
+    }))
+    const mounted = mountValidation(() => {
+      validation = useValidation(schema, model)
+      watch(() => validation.stateFor('email').validating, () => {}, { flush: 'sync' })
+      return validation
+    }, false)
+
+    const oldest = mounted.value.validateAt('email')
+    startNewest = true
+    let adopting!: Promise<TargetValidationResult>
+    expect(() => {
+      adopting = mounted.value.validateAt('email')
+    }).not.toThrow()
+
+    resolvers[1]?.({ value: { email: 'safe@example.com' } })
+    await expect(Promise.all([oldest, adopting, newest])).resolves.toEqual([
+      { issues: [] },
+      { issues: [] },
+      { issues: [] },
+    ])
+    expect(mounted.value.stateFor('email').validating).toBe(false)
+
+    resolvers[0]?.({ issues: [{ message: 'Late oldest', path: ['email'] }] })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(mounted.value.issues.value).toEqual([])
+  })
+
+  it('waits for a restored full predecessor before a re-entrant target commits', async () => {
+    const observationFailure = new Error('Middle full start observation failed')
+    const calls: string[] = []
+    const resolvers = new Map<string, (result: StandardSchemaV1.Result<{ email: string }>) => void>()
+    let email = 'oldest'
+    let startTarget = false
+    let target!: Promise<TargetValidationResult>
+    let validation!: ValidationGroup<'email'>
+    const model = {
+      get email() {
+        if (startTarget) {
+          startTarget = false
+          target = validation.validateAt('email')
+          throw observationFailure
+        }
+        return email
+      },
+    }
+    const schema = createSchema<{ email: string }>('test', value => new Promise((resolve) => {
+      calls.push(value.email)
+      resolvers.set(value.email, resolve)
+    }))
+    const mounted = mountValidation(() => {
+      validation = useValidation(schema, model)
+      watch(() => validation.state.value.validating, () => {}, { flush: 'sync' })
+      return validation
+    }, false)
+
+    const oldest = mounted.value.validate()
+    email = 'newest'
+    startTarget = true
+    const middle = mounted.value.validate()
+
+    await expect(middle).rejects.toBe(observationFailure)
+    expect(calls).toEqual(['oldest'])
+
+    resolvers.get('oldest')?.({ issues: [{ message: 'Old full', path: ['email'] }] })
+    await expect(oldest).resolves.toEqual({
+      success: false,
+      issues: [expect.objectContaining({ message: 'Old full' })],
+    })
+    await Promise.resolve()
+    expect(calls).toEqual(['oldest', 'newest'])
+
+    resolvers.get('newest')?.({ issues: [{ message: 'New target', path: ['email'] }] })
+    await expect(target).resolves.toEqual({
+      issues: [expect.objectContaining({ message: 'New target' })],
+    })
+    expect(mounted.value.errorsFor('email')).toEqual(['New target'])
+  })
+
+  it('lets a same-path predecessor adopt a target started while its replacement finishes', async () => {
+    const captureFailure = new Error('Middle target capture failed')
+    let throwOnRead = false
+    let startNewest = false
+    let newest!: Promise<TargetValidationResult>
+    let resolveOldest!: (result: StandardSchemaV1.Result<{ email: string }>) => void
+    let validation!: ValidationGroup<'email'>
+    const model = {
+      get email() {
+        if (throwOnRead) {
+          throwOnRead = false
+          throw captureFailure
+        }
+        return 'safe@example.com'
+      },
+    }
+    let validationCalls = 0
+    const schema = createSchema<{ email: string }>('test', value => validationCalls++ === 0
+      ? new Promise((resolve) => { resolveOldest = resolve })
+      : { value })
+    const mounted = mountValidation(() => {
+      validation = useValidation(schema, model)
+      watch(
+        () => validation.isValidating.value,
+        (validating) => {
+          if (!validating && startNewest) {
+            startNewest = false
+            newest = validation.validateAt('email')
+          }
+        },
+        { flush: 'sync' },
+      )
+      return validation
+    }, false)
+
+    const oldest = mounted.value.validateAt('email')
+    throwOnRead = true
+    startNewest = true
+    const middle = mounted.value.validateAt('email')
+
+    await expect(middle).rejects.toBe(captureFailure)
+    await expect(Promise.all([oldest, newest])).resolves.toEqual([
+      { issues: [] },
+      { issues: [] },
+    ])
+    expect(mounted.value.stateFor('email').validating).toBe(false)
+
+    resolveOldest({ issues: [{ message: 'Late oldest', path: ['email'] }] })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(mounted.value.issues.value).toEqual([])
+  })
+
+  it('restores an unsettled latest target when a newer start fails after full supersession', async () => {
+    const observationFailure = new Error('Target start observation failed')
+    const resolvers: Array<(result: StandardSchemaV1.Result<{ email: string }>) => void> = []
+    let throwOnRead = false
+    let validation!: ValidationGroup<'email'>
+    const model = {
+      get email() {
+        if (throwOnRead) {
+          throwOnRead = false
+          throw observationFailure
+        }
+        return 'safe@example.com'
+      },
+    }
+    const schema = createSchema<{ email: string }>('test', () => new Promise((resolve) => {
+      resolvers.push(resolve)
+    }))
+    const mounted = mountValidation(() => {
+      validation = useValidation(schema, model)
+      watch(() => validation.stateFor('email').validating, () => {}, { flush: 'sync' })
+      return validation
+    }, false)
+
+    const targeted = mounted.value.validateAt('email')
+    const full = mounted.value.validate()
+    expect(resolvers).toHaveLength(2)
+
+    throwOnRead = true
+    await expect(mounted.value.validateAt('email')).rejects.toBe(observationFailure)
+
+    resolvers[1]?.({ value: { email: 'safe@example.com' } })
+    await expect(Promise.all([targeted, full])).resolves.toEqual([
+      { issues: [] },
+      { success: true, issues: [] },
+    ])
+
+    resolvers[0]?.({ issues: [{ message: 'Late target', path: ['email'] }] })
+    await Promise.resolve()
+    expect(mounted.value.issues.value).toEqual([])
+  })
+
+  it('restores a settled latest target while an older caller is still adopting it', async () => {
+    const observationFailure = new Error('Later target start observation failed')
+    let startAdopter = false
+    let failLaterStart = false
+    let validation!: ValidationGroup<'email'>
+    let adopter!: Promise<TargetValidationResult>
+    let afterAdopter!: Promise<TargetValidationResult>
+    let failed!: Promise<TargetValidationResult>
+    let resolveAdopter!: (result: StandardSchemaV1.Result<{ email: string }>) => void
+    const model = {
+      get email() {
+        if (startAdopter) {
+          startAdopter = false
+          adopter = validation.validateAt('email')
+          afterAdopter = adopter.then((result) => {
+            failLaterStart = true
+            failed = validation.validateAt('email')
+            void failed.catch(() => {})
+            return result
+          })
+        }
+        if (failLaterStart) {
+          failLaterStart = false
+          throw observationFailure
+        }
+        return 'safe@example.com'
+      },
+    }
+    const schema = createSchema<{ email: string }>('test', () => new Promise((resolve) => {
+      resolveAdopter = resolve
+    }))
+    const mounted = mountValidation(() => {
+      validation = useValidation(schema, model)
+      watch(() => validation.stateFor('email').validating, () => {}, { flush: 'sync' })
+      return validation
+    }, false)
+
+    startAdopter = true
+    const predecessor = mounted.value.validateAt('email')
+    resolveAdopter({ value: { email: 'safe@example.com' } })
+
+    await expect(adopter).resolves.toEqual({ issues: [] })
+    await expect(afterAdopter).resolves.toEqual({ issues: [] })
+    await expect(failed).rejects.toBe(observationFailure)
+    await expect(predecessor).resolves.toEqual({ issues: [] })
+    expect(mounted.value.stateFor('email').validating).toBe(false)
+  })
+
+  it('makes an older full caller adopt a full validation started while its replacement finishes', async () => {
+    const email = ref('oldest')
+    const resolvers = new Map<string, (result: StandardSchemaV1.Result<{ email: string }>) => void>()
+    const schema = createSchema<{ email: string }>('test', value => new Promise((resolve) => {
+      resolvers.set(value.email, resolve)
+    }))
+    let newest: Promise<ValidationResult> | undefined
+    let startNewest = false
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, { email })
+      watch(
+        validation.isValidating,
+        (validating) => {
+          if (!validating && startNewest) {
+            startNewest = false
+            email.value = 'newest'
+            newest = validation.validate()
+          }
+        },
+        { flush: 'sync' },
+      )
+      return validation
+    }, false)
+
+    const oldest = mounted.value.validate()
+    email.value = 'middle'
+    const middle = mounted.value.validate()
+    startNewest = true
+
+    resolvers.get('middle')?.({ issues: [{ message: 'Middle', path: ['email'] }] })
+    await vi.waitFor(() => expect(newest).toBeDefined())
+    resolvers.get('newest')?.({ value: { email: 'newest' } })
+
+    await expect(middle).resolves.toEqual({
+      success: false,
+      issues: [expect.objectContaining({ message: 'Middle' })],
+    })
+    await expect(newest).resolves.toEqual({ success: true, issues: [] })
+    await expect(oldest).resolves.toEqual({ success: true, issues: [] })
+
+    resolvers.get('oldest')?.({ issues: [{ message: 'Late oldest', path: ['email'] }] })
+    await Promise.resolve()
+    expect(mounted.value.issues.value).toEqual([])
+  })
+
+  it('projects a full validation started while an older target replacement finishes', async () => {
+    const email = ref('target')
+    const resolvers = new Map<string, (result: StandardSchemaV1.Result<{ email: string }>) => void>()
+    const schema = createSchema<{ email: string }>('test', value => new Promise((resolve) => {
+      resolvers.set(value.email, resolve)
+    }))
+    let newest: Promise<ValidationResult> | undefined
+    let startNewest = false
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, { email })
+      watch(
+        validation.isValidating,
+        (validating) => {
+          if (!validating && startNewest) {
+            startNewest = false
+            email.value = 'newest'
+            newest = validation.validate()
+          }
+        },
+        { flush: 'sync' },
+      )
+      return validation
+    }, false)
+
+    const targeted = mounted.value.validateAt('email')
+    email.value = 'middle'
+    const middle = mounted.value.validate()
+    startNewest = true
+
+    resolvers.get('middle')?.({ issues: [{ message: 'Middle', path: ['email'] }] })
+    await vi.waitFor(() => expect(newest).toBeDefined())
+    resolvers.get('newest')?.({ value: { email: 'newest' } })
+
+    await expect(middle).resolves.toEqual({
+      success: false,
+      issues: [expect.objectContaining({ message: 'Middle' })],
+    })
+    await expect(newest).resolves.toEqual({ success: true, issues: [] })
+    await expect(targeted).resolves.toEqual({ issues: [] })
+
+    resolvers.get('target')?.({ issues: [{ message: 'Late target', path: ['email'] }] })
+    await Promise.resolve()
+    expect(mounted.value.issues.value).toEqual([])
+  })
+
+  it('retains model dependencies until reset failure recovery can capture them again', async () => {
+    const captureFailure = new Error('Reset capture failed')
+    const pulse = ref(0)
+    const email = ref('initial@example.com')
+    let mutatePulse = false
+    let throwBeforeEmailRead = false
+    const model = {
+      get pulse() {
+        const value = pulse.value
+        if (mutatePulse) {
+          mutatePulse = false
+          pulse.value++
+        }
+        return value
+      },
+      get email() {
+        if (throwBeforeEmailRead) {
+          throw captureFailure
+        }
+        return email.value
+      },
+    }
+    const schema = createSchema<{ pulse: number, email: string }>('test', value => ({ value }))
+    let evaluations = 0
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, model)
+      watch(
+        () => {
+          evaluations++
+          return validation.state.value.dirty
+        },
+        () => {},
+        { flush: 'sync' },
+      )
+      return validation
+    }, false)
+
+    expect(mounted.value.state.value.dirty).toBe(false)
+    mutatePulse = true
+    throwBeforeEmailRead = true
+    expect(() => mounted.value.resetState()).toThrow(captureFailure)
+
+    await Promise.resolve()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const evaluationsWhileThrowing = evaluations
+
+    throwBeforeEmailRead = false
+    email.value = 'later@example.com'
+    expect(evaluations).toBeGreaterThan(evaluationsWhileThrowing)
+    expect(mounted.value.state.value.dirty).toBe(true)
+  })
+
+  it('does not evaluate computed or custom ref models while registering', () => {
+    const failure = new Error('Lazy model read')
+    const factories = [
+      (read: () => never) => computed<{ email: string }>(read),
+      (read: () => never) => customRef<{ email: string }>((track, trigger) => ({
+        get() {
+          track()
+          return read()
+        },
+        set() {
+          trigger()
+        },
+      })),
+    ]
+
+    for (const createModel of factories) {
+      const read = vi.fn(() => {
+        throw failure
+      })
+      const model = createModel(read)
+      const schema = createSchema<{ email: string }>('test', value => ({ value }))
+      let mounted!: ReturnType<typeof mountValidation<ValidationController<typeof schema>>>
+
+      expect(() => {
+        mounted = mountValidation(() => useValidation(schema, model), false)
+      }).not.toThrow()
+      expect(read).not.toHaveBeenCalled()
+      expect(() => mounted.value.state.value).toThrow(failure)
+      expect(read).toHaveBeenCalledOnce()
+    }
+  })
+
+  it('captures a lazy registration after an observed root without reading it synchronously', async () => {
+    const source = ref({ email: 'initial@example.com' })
+    const read = vi.fn(() => source.value)
+    const model = computed(read)
+    const schema = createSchema<{ email: string }>('test', value => ({ value }))
+    let evaluations = 0
+    const mounted = mountValidation(() => {
+      const root = useValidation()
+      watch(
+        () => {
+          evaluations++
+          return root.state.value.dirty
+        },
+        () => {},
+        { flush: 'sync' },
+      )
+      useValidation(schema, model)
+      return root
+    }, false)
+
+    expect(read).not.toHaveBeenCalled()
+    await Promise.resolve()
+    expect(read).toHaveBeenCalledOnce()
+    expect(mounted.value.state.value.dirty).toBe(false)
+
+    const evaluationsBeforeMutation = evaluations
+    source.value = { email: 'changed@example.com' }
+    expect(evaluations).toBeGreaterThan(evaluationsBeforeMutation)
+    expect(mounted.value.state.value.dirty).toBe(true)
+  })
+
+  it('preserves exact reset state and reactive dependencies when capture fails', async () => {
+    const captureFailure = new Error('Later reset capture failed')
+    const email = ref('initial@example.com')
+    let mutateDuringReset = false
+    let throwDuringReset = false
+    const model = {
+      get email() {
+        const value = email.value
+        if (mutateDuringReset) {
+          mutateDuringReset = false
+          email.value = 'during@example.com'
+        }
+        return value
+      },
+      get code() {
+        if (throwDuringReset) {
+          throwDuringReset = false
+          throw captureFailure
+        }
+        return 'ready'
+      },
+    }
+    const schema = createSchema<{ email: string, code: string }>('test', value => ({ value }))
+    let validation!: ReturnType<typeof useValidation<typeof schema>>
+    const duringCapture: ValidationState[] = []
+    let evaluations = 0
+    const mounted = mountValidation(() => {
+      validation = useValidation(schema, model)
+      watch(
+        () => {
+          evaluations++
+          const state = validation.stateFor('email')
+          if (email.value === 'during@example.com') {
+            duringCapture.push(state)
+          }
+          return state.dirty || state.stale
+        },
+        () => {},
+        { flush: 'sync' },
+      )
+      return validation
+    }, false)
+
+    await mounted.value.validate()
+    email.value = 'changed@example.com'
+    expect(mounted.value.stateFor('email')).toMatchObject({ dirty: true, validated: true, stale: true })
+
+    mutateDuringReset = true
+    throwDuringReset = true
+    expect(() => mounted.value.resetState()).toThrow(captureFailure)
+    expect(duringCapture).toContainEqual(expect.objectContaining({ dirty: true, validated: true, stale: true }))
+    expect(mounted.value.stateFor('email')).toMatchObject({ dirty: true, validated: true, stale: true })
+
+    const evaluationsAfterFailure = evaluations
+    email.value = 'after@example.com'
+    expect(evaluations).toBeGreaterThan(evaluationsAfterFailure)
+    expect(mounted.value.stateFor('email')).toMatchObject({ dirty: true, validated: true, stale: true })
+  })
+
+  it('does not let a finish-time state observer failure retain validation activity', async () => {
+    const observationFailure = new Error('Finish state observation failed')
+    let throwOnRead = false
+    let resolvePending!: (result: StandardSchemaV1.Result<{ email: string }>) => void
+    const model = {
+      get email() {
+        if (throwOnRead) {
+          throw observationFailure
+        }
+        return 'safe@example.com'
+      },
+    }
+    const schema = createSchema<{ email: string }>('test', () => new Promise((resolve) => {
+      resolvePending = resolve
+    }))
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, model)
+      watch(() => validation.state.value.validating, () => {}, { flush: 'sync' })
+      return validation
+    }, false)
+    const pending = mounted.value.validate()
+
+    throwOnRead = true
+    resolvePending({ value: { email: 'safe@example.com' } })
+    await expect(pending).resolves.toEqual({ success: true, issues: [] })
+
+    throwOnRead = false
+    expect(mounted.value.isValidating.value).toBe(false)
+    expect(mounted.value.state.value.validating).toBe(false)
+    expect(mounted.value.stateFor('email').validating).toBe(false)
+  })
+
+  it('aborts pending full and targeted callers promptly and ignores late settlement after reset', async () => {
+    let resolveFull!: (result: StandardSchemaV1.Result<{ email: string }>) => void
+    const schema = createSchema<{ email: string }>('test', () => new Promise((resolve) => {
+      resolveFull = resolve
+    }))
+    const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
+
+    const full = mounted.value.validate()
+    const targeted = mounted.value.validateAt('email')
+    mounted.value.touch('email')
+    mounted.value.resetState()
+
+    const [fullResult, targetedResult] = await Promise.allSettled([full, targeted])
+    expect(fullResult.status).toBe('rejected')
+    expect(targetedResult.status).toBe('rejected')
+    if (fullResult.status === 'rejected' && targetedResult.status === 'rejected') {
+      expect(fullResult.reason).toBe(targetedResult.reason)
+      expect(fullResult.reason).toMatchObject({ name: 'AbortError' })
+    }
+
+    resolveFull({ issues: [{ message: 'Late', path: ['email'] }] })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(mounted.value.issues.value).toEqual([])
+    expect(mounted.value.result.value).toEqual({ status: 'idle' })
+    expect(mounted.value.state.value).toEqual({
+      dirty: false,
+      touched: false,
+      validated: false,
+      stale: false,
+      validating: false,
+    })
+  })
+
+  it('observes an abandoned full projection when reset follows target supersession', async () => {
+    const resolvers: Array<(result: StandardSchemaV1.Result<{ email: string }>) => void> = []
+    const schema = createSchema<{ email: string }>('test', () => new Promise((resolve) => {
+      resolvers.push(resolve)
+    }))
+    const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
+    const unhandledReasons: unknown[] = []
+    const recordUnhandled = (reason: unknown) => unhandledReasons.push(reason)
+    process.on('unhandledRejection', recordUnhandled)
+
+    try {
+      const targeted = mounted.value.validateAt('email')
+      const full = mounted.value.validate()
+      mounted.value.resetState()
+
+      const [targetedResult, fullResult] = await Promise.allSettled([targeted, full])
+      expect(targetedResult.status).toBe('rejected')
+      expect(fullResult.status).toBe('rejected')
+      if (targetedResult.status === 'rejected' && fullResult.status === 'rejected') {
+        expect(targetedResult.reason).toBe(fullResult.reason)
+        expect(targetedResult.reason).toMatchObject({ name: 'AbortError' })
+      }
+
+      await Promise.resolve()
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(unhandledReasons).toEqual([])
+      expect(mounted.value.state.value).toEqual({
+        dirty: false,
+        touched: false,
+        validated: false,
+        stale: false,
+        validating: false,
+      })
+
+      expect(resolvers).toHaveLength(2)
+      for (const resolve of resolvers) {
+        resolve({ issues: [{ message: 'Late', path: ['email'] }] })
+      }
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(mounted.value.issues.value).toEqual([])
+      expect(mounted.value.result.value).toEqual({ status: 'idle' })
+      expect(mounted.value.state.value).toEqual({
+        dirty: false,
+        touched: false,
+        validated: false,
+        stale: false,
+        validating: false,
+      })
+    }
+    finally {
+      process.off('unhandledRejection', recordUnhandled)
+    }
+  })
+
+  it('aborts a full caller when reset runs synchronously from its result commit', async () => {
+    const schema = createSchema<{ email: string }>('test', value => ({ value }))
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, { email: 'valid@example.com' })
+      let resetOnCommit = true
+      watch(
+        () => validation.result.value,
+        (result) => {
+          if (resetOnCommit && result.status !== 'idle') {
+            resetOnCommit = false
+            validation.resetState()
+          }
+        },
+        { flush: 'sync' },
+      )
+      return validation
+    }, false)
+
+    const full = mounted.value.validate()
+    const targeted = mounted.value.validateAt('email')
+    const [fullResult, targetedResult] = await Promise.allSettled([full, targeted])
+
+    expect(fullResult.status).toBe('rejected')
+    expect(targetedResult.status).toBe('rejected')
+    if (fullResult.status === 'rejected' && targetedResult.status === 'rejected') {
+      expect(fullResult.reason).toBe(targetedResult.reason)
+      expect(fullResult.reason).toMatchObject({ name: 'AbortError' })
+    }
+    expect(mounted.value.result.value).toEqual({ status: 'idle' })
+    expect(mounted.value.issues.value).toEqual([])
+    expect(mounted.value.state.value).toMatchObject({ validated: false, validating: false })
+  })
+
+  it('aborts a targeted caller when reset runs synchronously from its issue commit', async () => {
+    const schema = createSchema<{ email: string }>('test', () => ({
+      issues: [{ message: 'Invalid', path: ['email'] }],
+    }))
+    const mounted = mountValidation(() => {
+      const validation = useValidation(schema, { email: '' })
+      let resetOnCommit = true
+      watch(
+        () => validation.issues.value,
+        (issues) => {
+          if (resetOnCommit && issues.length > 0) {
+            resetOnCommit = false
+            validation.resetState()
+          }
+        },
+        { flush: 'sync' },
+      )
+      return validation
+    }, false)
+
+    await expect(mounted.value.validateAt('email')).rejects.toMatchObject({ name: 'AbortError' })
+    expect(mounted.value.result.value).toEqual({ status: 'idle' })
+    expect(mounted.value.issues.value).toEqual([])
+    expect(mounted.value.stateFor('email')).toMatchObject({ validated: false, validating: false })
+  })
+
+  it('keeps every pre-reset caller aborted when new validation starts immediately', async () => {
+    const resolvers = new Map<string, (result: StandardSchemaV1.Result<{ email: string }>) => void>()
+    const email = ref('older')
+    const schema = createSchema<{ email: string }>('test', value => new Promise((resolve) => {
+      resolvers.set(value.email, resolve)
+    }))
+    const mounted = mountValidation(() => useValidation(schema, { email }), false)
+
+    const older = mounted.value.validate()
+    email.value = 'current'
+    const current = mounted.value.validate()
+    mounted.value.resetState()
+
+    email.value = 'post-reset'
+    const postReset = mounted.value.validate()
+    const [olderResult, currentResult] = await Promise.allSettled([older, current])
+
+    expect(olderResult.status).toBe('rejected')
+    expect(currentResult.status).toBe('rejected')
+    if (olderResult.status === 'rejected' && currentResult.status === 'rejected') {
+      expect(olderResult.reason).toBe(currentResult.reason)
+      expect(olderResult.reason).toMatchObject({ name: 'AbortError' })
+    }
+
+    resolvers.get('post-reset')?.({ value: { email: 'post-reset' } })
+    await expect(postReset).resolves.toEqual({ success: true, issues: [] })
+    resolvers.get('older')?.({ issues: [{ message: 'Late older', path: ['email'] }] })
+    resolvers.get('current')?.({ issues: [{ message: 'Late current', path: ['email'] }] })
+    await Promise.resolve()
+    expect(mounted.value.issues.value).toEqual([])
+  })
+})
+
+describe('targeted validation interface', () => {
+  it('exposes validateFor as the same no-touch runtime function as validateAt', async () => {
+    const schema = createSchema<{ email: string }>('test', () => ({
+      issues: [{ message: 'Invalid', path: ['email'] }],
+    }))
+    const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
+
+    expect(mounted.value.validateFor).toBe(mounted.value.validateAt)
+    const result = await mounted.value.validateAt('email')
+    expect(result).toEqual({ issues: mounted.value.issuesFor('email') })
+    expect(mounted.value.stateFor('email')).toMatchObject({ touched: false, validated: true })
+  })
+
+  it('accepts branch-only top-level union keys and rejects unknown keys', () => {
+    type Account
+      = | { kind: 'person', dateOfBirth: string }
+        | { kind: 'company', companyNumber: string }
+    const schema = createSchema<Account>('test', value => ({ value }))
+    const model = ref<Account>({ kind: 'person', dateOfBirth: '' })
+    const mounted = mountValidation(() => useValidation(schema, model), false)
+
+    expectTypeOf(mounted.value.validateAt).parameter(0).toEqualTypeOf<
+      'kind' | 'dateOfBirth' | 'companyNumber' | readonly PropertyKey[]
+    >()
+    mounted.value.touch('dateOfBirth')
+    void mounted.value.stateFor('companyNumber')
+    void mounted.value.issuesFor('companyNumber')
+    if (false) {
+      // @ts-expect-error Union controllers reject unknown top-level keys.
+      void mounted.value.validateAt('missing')
+      // @ts-expect-error Union controllers reject unknown top-level keys.
+      mounted.value.touch('missing')
+      // @ts-expect-error Union controllers reject unknown top-level keys.
+      void mounted.value.stateFor('missing')
+    }
   })
 })
 
