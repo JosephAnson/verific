@@ -3,6 +3,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import BasicValidationExample from './BasicValidationExample.vue'
+import FormControlsExample from './FormControlsExample.vue'
 import I18nextValidationExample from './I18nextValidationExample.vue'
 import LocalisedValidationExample from './LocalisedValidationExample.vue'
 import NestedValidationExample from './NestedValidationExample.vue'
@@ -36,6 +37,139 @@ function buttonNamed(wrapper: VueWrapper, name: string): DOMWrapper<Element> {
 }
 
 describe('documentation examples', () => {
+  it('publishes and clears only the number issue on blur', async () => {
+    const wrapper = mount(FormControlsExample, { attachTo: document.body })
+    const age = controlForLabel(wrapper, 'Age')
+
+    await age.trigger('blur')
+    await flushPromises()
+
+    expect(age.attributes('aria-invalid')).toBe('true')
+    expect(wrapper.get('#controls-age-errors').text()).toBe('Enter your age')
+    expect(wrapper.get('#controls-country-errors').text()).toBe('')
+    expect(wrapper.get('#controls-interests-errors').text()).toBe('')
+
+    await age.setValue('24')
+    await age.trigger('blur')
+    await flushPromises()
+
+    expect(age.attributes('aria-invalid')).toBe('false')
+    expect(wrapper.get('#controls-age-errors').text()).toBe('')
+    expect(wrapper.get('#controls-country-errors').text()).toBe('')
+    expect(wrapper.get('#controls-interests-errors').text()).toBe('')
+  })
+
+  it('updates a scalar select before publishing or clearing its issue', async () => {
+    const wrapper = mount(FormControlsExample, { attachTo: document.body })
+    const country = controlForLabel(wrapper, 'Country')
+
+    await country.trigger('change')
+    await flushPromises()
+
+    expect(country.attributes('aria-invalid')).toBe('true')
+    expect(wrapper.get('#controls-country-errors').text()).toBe('Choose a country')
+    expect(wrapper.get('#controls-age-errors').text()).toBe('')
+    expect(wrapper.get('#controls-interests-errors').text()).toBe('')
+
+    await country.setValue('es')
+    await flushPromises()
+
+    expect(country.attributes('aria-invalid')).toBe('false')
+    expect(wrapper.get('#controls-country-errors').text()).toBe('')
+    expect(wrapper.get('#controls-age-errors').text()).toBe('')
+    expect(wrapper.get('#controls-interests-errors').text()).toBe('')
+  })
+
+  it('updates checkbox-array membership before validating the group path', async () => {
+    const wrapper = mount(FormControlsExample, { attachTo: document.body })
+    const design = controlForLabel(wrapper, 'Design')
+    const testing = controlForLabel(wrapper, 'Testing')
+
+    await design.setValue(true)
+    await flushPromises()
+
+    expect(wrapper.get('#controls-interests-errors').text()).toBe('')
+
+    await design.setValue(false)
+    await flushPromises()
+
+    expect(design.attributes('aria-invalid')).toBe('true')
+    expect(testing.attributes('aria-invalid')).toBe('true')
+    expect(wrapper.get('#controls-interests-errors').text()).toBe('Choose at least one interest')
+    expect(wrapper.get('#controls-age-errors').text()).toBe('')
+    expect(wrapper.get('#controls-country-errors').text()).toBe('')
+
+    await testing.setValue(true)
+    await flushPromises()
+
+    expect(design.attributes('aria-invalid')).toBe('false')
+    expect(testing.attributes('aria-invalid')).toBe('false')
+    expect(wrapper.get('#controls-interests-errors').text()).toBe('')
+  })
+
+  it('publishes every issue on submit and focuses the first invalid control', async () => {
+    const wrapper = mount(FormControlsExample, { attachTo: document.body })
+    const age = controlForLabel(wrapper, 'Age')
+
+    await buttonNamed(wrapper, 'Validate preferences').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('#controls-age-errors').text()).toBe('Enter your age')
+    expect(wrapper.get('#controls-country-errors').text()).toBe('Choose a country')
+    expect(wrapper.get('#controls-interests-errors').text()).toBe('Choose at least one interest')
+    expect(wrapper.get('[role="status"]').text()).toBe('Please resolve 3 validation errors.')
+    expect(document.activeElement).toBe(age.element)
+  })
+
+  it('uses only full validation to report a valid submission', async () => {
+    const wrapper = mount(FormControlsExample, { attachTo: document.body })
+    const age = controlForLabel(wrapper, 'Age')
+    const country = controlForLabel(wrapper, 'Country')
+    const design = controlForLabel(wrapper, 'Design')
+    const status = wrapper.get('[role="status"]')
+
+    await age.setValue('24')
+    await age.trigger('blur')
+    await country.setValue('gb')
+    await design.setValue(true)
+    await flushPromises()
+
+    expect(status.text()).toBe('Submit to validate every field.')
+
+    await buttonNamed(wrapper, 'Validate preferences').trigger('click')
+    await flushPromises()
+
+    expect(status.text()).toBe('The preferences are valid.')
+  })
+
+  it('keeps overlapping blur and submit feedback under full-validation authority', async () => {
+    const wrapper = mount(FormControlsExample, { attachTo: document.body })
+    const age = controlForLabel(wrapper, 'Age')
+    const country = controlForLabel(wrapper, 'Country')
+    const design = controlForLabel(wrapper, 'Design')
+    const submit = buttonNamed(wrapper, 'Validate preferences')
+    const status = wrapper.get('[role="status"]')
+
+    const invalidBlur = age.trigger('blur')
+    const invalidSubmit = submit.trigger('click')
+    await Promise.all([invalidBlur, invalidSubmit])
+    await flushPromises()
+
+    expect(status.text()).toBe('Please resolve 3 validation errors.')
+
+    await age.setValue('24')
+    await country.setValue('gb')
+    await design.setValue(true)
+    await flushPromises()
+
+    const validBlur = age.trigger('blur')
+    const validSubmit = submit.trigger('click')
+    await Promise.all([validBlur, validSubmit])
+    await flushPromises()
+
+    expect(status.text()).toBe('The preferences are valid.')
+  })
+
   it('publishes only blurred account fields while preserving earlier field errors', async () => {
     const wrapper = mount(BasicValidationExample, { attachTo: document.body })
     const email = controlForLabel(wrapper, 'Email address')

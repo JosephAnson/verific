@@ -6,6 +6,7 @@ const Start = [
 ]
 
 const CoreConcepts = [
+  { text: 'Binding form controls', link: '/guide/core/form-controls' },
   { text: 'Scopes and registrations', link: '/guide/core/nested-validation' },
   { text: 'Issues and errors', link: '/guide/core/issues-and-errors' },
   { text: 'Submitting validated data', link: '/guide/core/service-layer-to-validation' },

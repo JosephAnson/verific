@@ -36,8 +36,8 @@ Call `validateFor(path)` when an interaction such as blur should update one
 field without revealing errors for untouched fields:
 
 ```ts
-const { errorsFor, hasError, validateFor } = useValidation(schema, model)
-await validateFor('email')
+const { errorsFor, hasError, validate, validateFor } = useValidation(schema, model)
+const { issues } = await validateFor('email')
 ```
 
 This is targeted publication, not schema slicing. Verific captures the complete
@@ -45,15 +45,23 @@ model and executes the complete matching Standard Schema registrations, so
 cross-field refinements receive all input. Only fresh issues at the selected
 exact path replace committed issue state; unrelated committed issues remain.
 
-The returned `ValidationResult` contains only issues at that path and its
-`success` describes only that field. It must not authorise submission.
-`validateFor()` never updates a registration's `result` or transformed output.
-Those remain `idle` until full `validate()` runs and remain owned by the latest
-full validation afterwards.
+The public targeted result is deliberately issues-only:
+
+```ts
+interface TargetValidationResult {
+  readonly issues: readonly ValidationIssue[]
+}
+```
+
+It contains fresh issues only for the selected path. An empty array does not
+approve the complete scope: await full `validate()` and inspect its `success`
+status before submission. `validateFor()` never updates a registration's
+`result` or transformed output. Those remain `idle` until full `validate()` runs
+and remain owned by the latest full validation afterwards.
 
 ## Results and transformed output
 
-The promise resolves with the aggregate scope status:
+Full `validate()` resolves with the aggregate scope status:
 
 ```ts
 type ValidationResult
@@ -141,8 +149,9 @@ scope, although application-wide `createVerific` policy remains available.
 
 ## Failures
 
-Ordinary invalid schema results resolve with `success: false`; operational
-failures reject the validation promise. Rejections include:
+Ordinary invalid data resolves rather than rejects: full `validate()` reports
+`success: false`, while `validateFor()` returns the selected issues. Operational
+failures reject either promise. Rejections include:
 
 - a schema validator throwing or returning a rejected promise;
 - an error while capturing the model;
@@ -175,5 +184,5 @@ that read, not from the preceding `validate()` call.
 Calling `useValidation` outside component setup throws immediately. A
 non-compliant non-reactive schema also throws when its registration is created.
 
-Return to the [`useValidation` member index](./use-validation#members-at-a-glance)
+Return to the [`useValidation` common members](./use-validation#members-at-a-glance)
 or continue with [Message resolution](./messages).

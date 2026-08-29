@@ -63,6 +63,8 @@ async function submit() {
 `validateFor('email')` runs the complete schema but publishes only that exact
 path, which makes it suitable for blur validation. Use `validate()` for submit:
 it publishes the complete form result and owns transformed schema output.
+See [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)
+for number, choice, file, repeated-row and custom-control patterns.
 
 The `@verific/core` runtime exports are `useValidation`, `createVerific` and
 `ErrorMessages`. Most forms only need `useValidation`; `createVerific` adds
@@ -72,6 +74,7 @@ input normaliser. See [Rendering errors](https://verific.josephanson.com/guide/c
 ## Learn more
 
 - [Getting started](https://verific.josephanson.com/guide/)
+- [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)
 - [`useValidation` reference](https://verific.josephanson.com/guide/reference/use-validation)
 - [Localisation](https://verific.josephanson.com/guide/localisation)
 - [Nuxt](https://verific.josephanson.com/guide/nuxt)

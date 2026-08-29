@@ -7,6 +7,17 @@ resolved error strings.
 Call it during Vue component setup. No plugin is required unless you want
 application-wide message resolution or issue normalisation.
 
+Most forms begin with the same destructured interface:
+
+```ts
+const { errorsFor, hasError, validate, validateFor } = useValidation(schema, model)
+```
+
+Use `errorsFor()` and `hasError()` to render one field, `validateFor()` after a
+field interaction and `validate()` before submission. See
+[Binding form controls](../core/form-controls) for practical event and value
+patterns.
+
 For run results, transformed output, snapshots, disposal and overlapping async
 runs, see [Validation lifecycle](./validation-lifecycle).
 
@@ -32,7 +43,10 @@ The model can be a reactive object, a ref containing the schema input, or an
 object whose fields are individual refs:
 
 ```ts
-const { errorsFor, validate } = useValidation(schema, { email, password })
+const { errorsFor, hasError, validate, validateFor } = useValidation(schema, {
+  email,
+  password,
+})
 ```
 
 The first call in a component tree creates a scope. Later calls in that
@@ -42,12 +56,31 @@ any group or controller validates every active registration in that scope.
 Use `{ scope: 'new' }` when a nested form must validate independently:
 
 ```ts
-const { errorsFor, validate } = useValidation(schema, model, { scope: 'new' })
+const { errorsFor, hasError, validate, validateFor } = useValidation(schema, model, {
+  scope: 'new',
+})
 ```
 
-## Members at a glance
+## Common members {#members-at-a-glance}
 
-Every `ValidationGroup` and `ValidationController` has these scope members:
+Every `ValidationGroup` and `ValidationController` exposes the four members used
+by most forms:
+
+| Member | Type | Meaning |
+| --- | --- | --- |
+| `errorsFor(path)` | `readonly string[]` | Resolved error strings at one exact path. |
+| `hasError(path)` | `boolean` | Whether that exact path has at least one issue. |
+| `validate()` | `Promise<ValidationResult>` | Validate every active registration in the scope. |
+| `validateFor(path)` | `Promise<TargetValidationResult>` | Run complete matching schemas and publish fresh issues only at one exact path. |
+
+`TargetValidationResult` contains only a readonly `issues` array. It has no
+submission status or transformed output. `ValidationResult` is returned only by
+full `validate()` and exposes the whole-scope `success` status.
+
+## Advanced state and selectors
+
+Use the remaining scope members when you need raw issues, aggregate state or a
+single resolved error:
 
 | Member | Type | Meaning |
 | --- | --- | --- |
@@ -55,24 +88,15 @@ Every `ValidationGroup` and `ValidationController` has these scope members:
 | `errors` | `ComputedRef<readonly string[]>` | All committed issues resolved to display-ready strings. |
 | `isValidating` | `ComputedRef<boolean>` | Whether any full, targeted or queued validation work is pending. |
 | `issuesFor(path)` | `readonly ValidationIssue[]` | Structured issues at one exact path. |
-| `hasError(path)` | `boolean` | Whether that exact path has at least one issue. |
-| `errorsFor(path)` | `readonly string[]` | Resolved error strings at one exact path. |
 | `errorFor(path)` | `string \| undefined` | The first resolved error at one exact path. |
-| `validateFor(path)` | `Promise<ValidationResult>` | Run complete matching schemas and publish fresh issues only at one exact path. |
-| `validate()` | `Promise<ValidationResult>` | Validate every active registration in the scope. |
 
-Only the schema/model overload returns registration-local state:
+Only the schema/model overload returns registration-local state and transformed
+output:
 
 | Member | Type | Meaning |
 | --- | --- | --- |
 | `ownIssues` | `ComputedRef<readonly ValidationIssue[]>` | Issues produced by this registration only. |
 | `result` | `Readonly<ShallowRef<RegistrationResult<Output>>>` | This registration's idle, valid or invalid state, including typed output on success. |
-
-Simple code can destructure the members it needs:
-
-```ts
-const { errorsFor, hasError, validate, validateFor } = useValidation(schema, model)
-```
 
 Destructure `result` when you need registration-local state. The result unions
 and output access pattern are documented under
@@ -133,11 +157,50 @@ matches the selected path:
 >
 ```
 
-Its returned `ValidationResult` describes only the selected path. A successful
-targeted result does not mean that the complete form is valid and must not be
-used to authorise submission. Targeted validation updates issue selectors but
-does not update registration `result` or transformed output; full `validate()`
-owns those submission states.
+Text-like controls usually call `validateFor()` on blur. Choices, pickers and
+files should update the application model before calling it on change:
+
+```ts
+async function onCountryChange(value: string) {
+  country.value = value
+  await validateFor('country')
+}
+```
+
+Each call returns the fresh issues for the selected exact path:
+
+```ts
+interface TargetValidationResult {
+  readonly issues: readonly ValidationIssue[]
+}
+
+const { issues } = await validateFor('email')
+```
+
+An empty `issues` array describes only that path, not the complete form. The
+targeted result deliberately has no `success` member. Targeted validation
+updates issue selectors but does not update registration `result` or
+transformed output; full `validate()` owns those submission states and is the
+only submission gate.
+
+For a repeated field, include the current array index in the exact path:
+
+```ts
+async function onContactEmailBlur(index: number) {
+  await validateFor(['contacts', index, 'email'])
+}
+```
+
+After a row is reordered or removed, its old index no longer identifies the
+same value. Run full validation after changing the array so every published
+issue describes the new structure:
+
+```ts
+async function removeContact(index: number) {
+  contacts.value.splice(index, 1)
+  await validate()
+}
+```
 
 On a controller with `at`, selectors are relative to that prefix:
 

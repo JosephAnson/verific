@@ -48,7 +48,9 @@ async function submit() {
 
 `validateFor('email')` validates the complete model while publishing only that
 exact path. Use full `validate()` as the submission gate and to populate typed
-transformed output.
+transformed output. See
+[Binding form controls](https://verific.josephanson.com/guide/core/form-controls)
+for the recommended value and event patterns.
 
 The package has three runtime exports:
 
@@ -57,6 +59,8 @@ The package has three runtime exports:
 - [`ErrorMessages`](https://verific.josephanson.com/guide/components/error-messages) optionally normalises error inputs.
 
 Read the canonical [Vue guide](https://verific.josephanson.com/guide/),
+form-control
+[binding guide](https://verific.josephanson.com/guide/core/form-controls),
 [`useValidation` reference](https://verific.josephanson.com/guide/reference/use-validation)
 and [localisation guide](https://verific.josephanson.com/guide/localisation).
 

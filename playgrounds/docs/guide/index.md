@@ -1,8 +1,8 @@
 ---
 outline: deep
 next:
-  text: Scopes and registrations
-  link: /guide/core/nested-validation
+  text: Binding form controls
+  link: /guide/core/form-controls
 ---
 
 <script setup>
@@ -16,6 +16,7 @@ Verific validates an application-owned model with any [Standard Schema](https://
 ## Choose a task
 
 - **Validate one form:** continue with the complete example on this page.
+- **Connect inputs and events:** choose a model shape and trigger in [Binding form controls](/guide/core/form-controls).
 - **Compose descendant registrations:** learn how [scopes collect nested forms](/guide/core/nested-validation).
 - **Render or localise errors:** [configure localised messages](/guide/localisation) while keeping accessible markup under your control.
 - **Use Verific with Nuxt:** [configure the Nuxt module](/guide/nuxt) once for an application.
@@ -54,7 +55,15 @@ This example is the complete `useValidation(schema, model)` workflow. Try it in 
 <<< ../.vitepress/examples/BasicValidationExample.vue
 :::
 
-The component owns its refs and submission state. `validateFor(path)` is useful for blur or change events: it captures the complete model and runs the complete Standard Schema, then publishes issues only at that exact path. `validate()` publishes the full result and remains the method to await before submission. Both methods may be asynchronous.
+Most forms start with the same four controller members:
+
+```ts
+const { errorsFor, hasError, validate, validateFor } = useValidation(schema, model)
+```
+
+The component owns its refs and submission state. `validateFor(path)` captures the complete model and runs the complete Standard Schema, then publishes issues only at that exact path. Prefer blur for text-like values. For choices, pickers and files, update the model first and then call `validateFor(path)` on change. `validate()` publishes the full result and remains the method to await before submission. Both methods may be asynchronous.
+
+Continue with [Binding form controls](/guide/core/form-controls) for numeric, choice, file, repeated-row and custom-control patterns.
 
 Before localisation is configured, `errorsFor()` returns the prose supplied by the schema. See [localising errors](/guide/localisation) when the form is working.
 
@@ -66,4 +75,4 @@ Before localisation is configured, `errorsFor()` returns the prose supplied by t
 4. A message resolver turns an issue into a ready-to-render **error** string. Schema prose is the fallback.
 5. A successful registration may expose **transformed output** from the schema; Verific does not write it back to the model.
 
-For a form split across components, continue with [scopes and registrations](/guide/core/nested-validation). The `useValidation` page in Reference documents the complete controller interface.
+After binding the controls, use [scopes and registrations](/guide/core/nested-validation) when a form is split across components. The [`useValidation` reference](/guide/reference/use-validation) documents the complete controller interface.
