@@ -18,6 +18,7 @@ const { errorsFor } = useValidation(
       v-model="name"
       type="text"
       autocomplete="name"
+      required
       :aria-invalid="errorsFor('name').length > 0"
       aria-describedby="nested-name-errors"
     >

@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vitepress dev",
     "build": "vitepress build",
-    "typecheck:examples": "vue-tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM --types vitest/globals .vitepress/examples/FormStateExample.vue .vitepress/examples/AdvancedSchemasExample.vue .vitepress/examples/form-state-advanced.check.ts",
+    "typecheck:examples": "vue-tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM --types vitest/globals .vitepress/examples/BasicValidationExample.vue .vitepress/examples/FormControlsExample.vue .vitepress/examples/I18nextValidationExample.vue .vitepress/examples/LocalisedValidationExample.vue .vitepress/examples/NestedValidationExample.vue .vitepress/examples/NestedNameField.vue .vitepress/examples/NestedPhoneField.vue .vitepress/examples/ParaglideValidationExample.vue .vitepress/examples/FormStateExample.vue .vitepress/examples/AdvancedSchemasExample.vue .vitepress/examples/examples.check.ts .vitepress/examples/form-state-advanced.check.ts",
     "test": "pnpm typecheck:examples && tsc --noEmit -p guide/localisation/examples/tsconfig.json && vitest run --config vitest.config.mts && vitest run --config guide/localisation/examples/vitest.config.mts",
     "check": "pnpm test && node scripts/check-docs.mjs --self-test && node scripts/check-docs.mjs && vitepress build",
     "preview": "vitepress preview"
@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/compiler-sfc": "3.5.42",
     "@vue/test-utils": "^2.5.0",
     "jsdom": "^30.0.1",
     "typescript": "5.9.3",

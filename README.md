@@ -27,26 +27,35 @@ import { z } from 'zod'
 
 const email = ref('')
 const schema = z.object({ email: z.string().email() })
-const { errorsFor, hasError, validate, validateFor } = useValidation(schema, { email })
+const { errorsFor, hasError, state, touch, validate, validateAt } = useValidation(schema, { email })
+
+async function onEmailBlur() {
+  touch('email')
+  await validateAt('email')
+}
 
 async function submit() {
   const result = await validate()
-  if (result.success) {
+  if (result.success && state.value.validated && !state.value.stale) {
     // Submit application-owned state.
   }
 }
 </script>
 
 <template>
-  <form novalidate @submit.prevent="submit">
+  <form novalidate aria-describedby="email-required-instructions" @submit.prevent="submit">
+    <p id="email-required-instructions">
+      Email is required.
+    </p>
     <label for="email">Email</label>
     <input
       id="email"
       v-model="email"
       type="email"
+      required
       :aria-invalid="hasError('email')"
       aria-describedby="email-errors"
-      @blur="validateFor('email')"
+      @blur="onEmailBlur"
     >
     <div id="email-errors" aria-live="polite">
       <p v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
@@ -60,9 +69,12 @@ async function submit() {
 </template>
 ```
 
-`validateFor('email')` runs the complete schema but publishes only that exact
-path, which makes it suitable for blur validation. Use `validate()` for submit:
-it publishes the complete form result and owns transformed schema output.
+`validateAt('email')` runs the complete schema but publishes only that exact
+path. The blur handler records interaction explicitly because validation alone
+never marks a path touched. Use `validate()` for submit: it publishes the
+complete form result and owns transformed schema output.
+The aggregate state guard prevents submission from using an older async
+snapshot after the model changes.
 See [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)
 for number, choice, file, repeated-row and custom-control patterns.
 
@@ -75,6 +87,8 @@ input normaliser. See [Rendering errors](https://verific.josephanson.com/guide/c
 
 - [Getting started](https://verific.josephanson.com/guide/)
 - [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)
+- [Form state](https://verific.josephanson.com/guide/core/form-state)
+- [Advanced schemas](https://verific.josephanson.com/guide/core/advanced-schemas)
 - [`useValidation` reference](https://verific.josephanson.com/guide/reference/use-validation)
 - [Localisation](https://verific.josephanson.com/guide/localisation)
 - [Nuxt](https://verific.josephanson.com/guide/nuxt)

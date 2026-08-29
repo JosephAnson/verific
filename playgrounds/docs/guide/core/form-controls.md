@@ -10,9 +10,11 @@ import FormControlsExample from '../../.vitepress/examples/FormControlsExample.v
 
 Verific validates application-owned values; it does not bind DOM elements or choose when a field becomes visible as invalid. Connect each control to a ref or reactive property, update that value, then call the appropriate validation action.
 
-- Use `validateFor(path)` after a field interaction. It runs the complete schema but publishes only the issue at that exact path.
+- After a field interaction, call `touch(path)` and then `validateAt(path)`. Targeted validation runs the complete schema but publishes only issues at that exact path.
 - Use `validate()` for submission. Its full result is the only authority for continuing to the next application step.
-- Prefer blur for text-like values and change for choices, pickers and files. Always update the model before calling `validateFor()`.
+- Prefer blur for text-like values and change for choices, pickers and files. Always update the model before touching and validating its path.
+
+Touch is interaction metadata; it does not itself show or hide errors. Calling `validateAt()` programmatically does not mark a path touched. Use `stateFor(path).touched` only when the application deliberately wants interaction-aware presentation. See [Form state](./form-state) for the complete state lifecycle.
 
 ## Try three distinct value shapes {#form-control-demo}
 
@@ -29,7 +31,7 @@ This form covers the patterns that differ most in everyday use:
 <<< ../../.vitepress/examples/FormControlsExample.vue
 :::
 
-The error containers remain mounted even when empty, so every `aria-describedby` reference stays valid. The checkbox choices share a `fieldset`, `legend` and group error. The form uses `novalidate` so native browser messages do not compete with the schema messages.
+The error containers remain mounted even when empty, so every `aria-describedby` reference stays valid. Native `required` exposes scalar requirements, while the checkbox group uses a visible, persistently described at-least-one instruction because HTML cannot express that constraint without falsely requiring an individual checkbox. The choices share a `fieldset`, `legend` and group error. The form uses `novalidate` so native browser messages do not compete with the schema messages.
 
 ## Choose by behaviour, not element name
 
@@ -52,12 +54,29 @@ Most form controls reduce to a small set of model shapes and events:
 
 Text-like fields usually validate on blur so validation does not interrupt typing. Keep an explicit blank state for numeric fields; `v-model.number` leaves an empty number input as `''` rather than inventing zero.
 
+```ts
+async function onEmailBlur() {
+  touch('email')
+  await validateAt('email')
+}
+
+async function onAgeBlur() {
+  touch('age')
+  await validateAt('age')
+}
+
+async function onVolumeChange() {
+  touch('volume')
+  await validateAt('volume')
+}
+```
+
 ```vue
-<input v-model="email" type="email" @blur="validateFor('email')">
+<input v-model="email" type="email" @blur="onEmailBlur">
 
-<input v-model.number="age" type="number" @blur="validateFor('age')">
+<input v-model.number="age" type="number" @blur="onAgeBlur">
 
-<input v-model.number="volume" type="range" @change="validateFor('volume')">
+<input v-model.number="volume" type="range" @change="onVolumeChange">
 ```
 
 If an application deliberately validates while a range thumb moves, use `input` and account for the higher validation frequency.
@@ -66,27 +85,51 @@ If an application deliberately validates while a range thumb moves, use `input` 
 
 Radio buttons behave like one scalar choice. A multiple select behaves like a checkbox group and supplies an array:
 
+```ts
+async function onDeliveryChange() {
+  touch('delivery')
+  await validateAt('delivery')
+}
+
+async function onTopicsChange() {
+  touch('topics')
+  await validateAt('topics')
+}
+```
+
 ```vue
-<input v-model="delivery" type="radio" value="standard" @change="validateFor('delivery')">
+<input v-model="delivery" type="radio" value="standard" @change="onDeliveryChange">
 
-<input v-model="delivery" type="radio" value="express" @change="validateFor('delivery')">
+<input v-model="delivery" type="radio" value="express" @change="onDeliveryChange">
 
-<select v-model="topics" multiple @change="validateFor('topics')">
+<select v-model="topics" multiple @change="onTopicsChange">
   <option value="design">Design</option>
   <option value="testing">Testing</option>
 </select>
 ```
 
-Use a `fieldset` and `legend` for a related radio or checkbox group. Point every member at the same persistent error container.
+Vue updates each `v-model` value before the named change handler touches and validates its path. Use a `fieldset` and `legend` for a related radio or checkbox group. Point every member at the same persistent error container.
 
 ### Date and time
 
 Native temporal controls expose strings such as `2026-08-29` or `14:30`. Keep that string in the form model and let the schema transform it, or convert it in the change handler before validation:
 
-```vue
-<input v-model="appointmentDate" type="date" @change="validateFor('appointmentDate')">
+```ts
+async function onAppointmentDateChange() {
+  touch('appointmentDate')
+  await validateAt('appointmentDate')
+}
 
-<input v-model="appointmentTime" type="time" @change="validateFor('appointmentTime')">
+async function onAppointmentTimeChange() {
+  touch('appointmentTime')
+  await validateAt('appointmentTime')
+}
+```
+
+```vue
+<input v-model="appointmentDate" type="date" @change="onAppointmentDateChange">
+
+<input v-model="appointmentTime" type="time" @change="onAppointmentTimeChange">
 ```
 
 Choose one representation deliberately; do not mix native strings and `Date` objects in the same field.
@@ -101,7 +144,8 @@ const attachments = ref<File[]>([])
 async function onFilesChange(event: Event) {
   const input = event.currentTarget as HTMLInputElement
   attachments.value = Array.from(input.files ?? [])
-  await validateFor('attachments')
+  touch('attachments')
+  await validateAt('attachments')
 }
 ```
 
@@ -113,15 +157,23 @@ async function onFilesChange(event: Event) {
 
 Build the path from the current array index when the interaction occurs:
 
+```ts
+async function onContactEmailBlur(index: number) {
+  const path = ['contacts', index, 'email'] as const
+  touch(path)
+  await validateAt(path)
+}
+```
+
 ```vue
 <input
   v-model="contacts[index].email"
   type="email"
-  @blur="validateFor(['contacts', index, 'email'])"
+  @blur="onContactEmailBlur(index)"
 >
 ```
 
-After reordering or removing rows, indices no longer describe the same entries. Run full `validate()` so the published issues reflect the new structure before treating it as current.
+After reordering or removing rows, indices no longer describe the same entries. Run full `validate()` so published issues reflect the new structure before treating them as current. Touched paths are positional too: Verific cannot remap an earlier index to a logical row, so do not use it as stable row identity.
 
 ### Custom controls
 
@@ -130,7 +182,8 @@ At a custom-control seam, assign the emitted value before targeted validation ra
 ```ts
 async function onRatingChange(value: number) {
   rating.value = value
-  await validateFor('rating')
+  touch('rating')
+  await validateAt('rating')
 }
 ```
 
@@ -139,3 +192,5 @@ async function onRatingChange(value: number) {
 ```
 
 This preserves a small validation interface while the application retains ownership of event timing, accessible markup and value conversion.
+
+Continue with [Advanced schemas](./advanced-schemas) for runnable nested, repeated, custom and discriminated-union patterns.

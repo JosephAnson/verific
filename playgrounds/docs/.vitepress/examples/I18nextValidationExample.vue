@@ -3,7 +3,7 @@ import type { CatalogueMissingMessageDiagnostic } from '@verific/i18n'
 import { useValidation } from '@verific/core'
 import { i18nextMessages } from '@verific/i18next'
 import { createInstance } from 'i18next'
-import { nextTick, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onUnmounted, ref } from 'vue'
 import { z } from 'zod'
 
 const i18n = createInstance()
@@ -36,24 +36,31 @@ const messages = i18nextMessages(i18n, {
   missing: reportMissing,
 })
 const outcome = ref('Validate once, then change the locale.')
-const { errorsFor, hasError, isValidating, validate } = useValidation(
+const { errorsFor, hasError, isValidating, state, validate } = useValidation(
   schema,
   { email },
   { messages },
 )
+const visibleOutcome = computed(() => (
+  state.value.stale
+    ? 'The email address changed after validation. Validate again.'
+    : outcome.value
+))
 
 onUnmounted(messages.dispose)
 
 async function onSubmit() {
   const result = await validate()
-  outcome.value = result.success
-    ? 'The email address is valid.'
-    : 'The committed error is translated when the locale changes.'
-
   if (!result.success) {
+    outcome.value = 'The committed error is translated when the locale changes.'
     await nextTick()
     document.getElementById('i18next-email')?.focus()
+    return
   }
+
+  outcome.value = state.value.validated && !state.value.stale
+    ? 'The email address is valid.'
+    : 'The email address changed during validation. Validate again.'
 }
 
 async function changeLocale() {
@@ -78,7 +85,10 @@ function toggleMissingDemonstration() {
 
 <template>
   <div class="verific-example">
-    <form novalidate @submit.prevent="onSubmit">
+    <form novalidate aria-describedby="i18next-demo-required-instructions" @submit.prevent="onSubmit">
+      <p id="i18next-demo-required-instructions" class="verific-example__required">
+        Email is required.
+      </p>
       <div class="verific-example__toolbar">
         <div class="verific-example__field">
           <label for="i18next-locale">Message language</label>
@@ -103,6 +113,7 @@ function toggleMissingDemonstration() {
           v-model="email"
           type="email"
           autocomplete="email"
+          required
           :aria-invalid="hasError('email')"
           aria-describedby="i18next-email-errors"
         >
@@ -144,7 +155,7 @@ function toggleMissingDemonstration() {
       </p>
 
       <p class="verific-example__outcome" role="status" aria-live="polite">
-        {{ outcome }}
+        {{ visibleOutcome }}
       </p>
     </form>
   </div>

@@ -91,8 +91,15 @@ To see issues become associated field messages during a real submission, use the
 
 The output may differ from the model because schemas can trim, coerce or transform values.
 
+A committed `result` can become stale when the model, schema or participating
+registrations change. Check `state.value.validated && !state.value.stale` before
+presenting transformed output as current submission data. See
+[Form state](./form-state#current-results-and-submission-output) for the runnable
+pattern.
+
 ## Choose your next task
 
 - [Render errors with accessible field associations](/guide/components/error-messages).
 - [Localise error strings](/guide/localisation) while keeping issues structured.
 - [Submit validated, transformed data](/guide/core/service-layer-to-validation).
+- [Build custom, nested and discriminated-union schemas](/guide/core/advanced-schemas).

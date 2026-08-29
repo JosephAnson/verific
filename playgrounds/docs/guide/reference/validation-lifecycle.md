@@ -22,22 +22,26 @@ validates successfully.
 Always await `validate()`:
 
 ```ts
-const { validate } = useValidation(schema, model)
+const { state, validate } = useValidation(schema, model)
 const outcome = await validate()
 
-if (outcome.success) {
+if (outcome.success && state.value.validated && !state.value.stale) {
   // Continue with submission.
 }
 ```
 
 ## Targeted validation
 
-Call `validateFor(path)` when an interaction such as blur should update one
-field without revealing errors for untouched fields:
+Call `touch(path)` and then `validateAt(path)` when an interaction such as blur
+should update one exact field path without replacing unrelated publication:
 
 ```ts
-const { errorsFor, hasError, validate, validateFor } = useValidation(schema, model)
-const { issues } = await validateFor('email')
+const { errorsFor, hasError, touch, validate, validateAt } = useValidation(schema, model)
+
+async function onEmailBlur() {
+  touch('email')
+  const { issues } = await validateAt('email')
+}
 ```
 
 This is targeted publication, not schema slicing. Verific captures the complete
@@ -55,9 +59,11 @@ interface TargetValidationResult {
 
 It contains fresh issues only for the selected path. An empty array does not
 approve the complete scope: await full `validate()` and inspect its `success`
-status before submission. `validateFor()` never updates a registration's
+status before submission. `validateAt()` never updates a registration's
 `result` or transformed output. Those remain `idle` until full `validate()` runs
-and remain owned by the latest full validation afterwards.
+and remain owned by the latest full validation afterwards. Neither targeted nor
+full validation marks a path touched; programmatic validation therefore remains
+separate from user interaction.
 
 ## Results and transformed output
 
@@ -84,10 +90,15 @@ the controller reads `idle` again. The `valid` value is the Standard Schema's
 typed output:
 
 ```ts
-const { result, validate } = useValidation(schema, model)
+const { result, state, validate } = useValidation(schema, model)
 const outcome = await validate()
 
-if (outcome.success && result.value.status === 'valid') {
+if (
+  outcome.success
+  && result.value.status === 'valid'
+  && state.value.validated
+  && !state.value.stale
+) {
   const output = result.value.value
 }
 ```
@@ -95,7 +106,8 @@ if (outcome.success && result.value.status === 'valid') {
 Verific stores the output in `result`; it does not write it back into the
 original model. In a scope with more than one registration, `outcome.success`
 describes the whole scope; read each controller's `result` for its
-registration-specific output.
+registration-specific output. The `state` check above ensures that the typed
+output still describes the current model rather than an earlier async snapshot.
 
 ## Input snapshots
 
@@ -112,6 +124,27 @@ await pending
 
 The pending run validates the value captured at its start. Non-plain objects are
 passed through rather than cloned.
+
+## Validation state and freshness
+
+`state` is the aggregate computed state for the active scope, while
+`stateFor(path)` reports one exact path. An authoritative targeted commit makes
+that path validated; only an authoritative full commit makes the aggregate
+validated.
+
+Validation stamps cover complete matching registrations because Standard Schema
+does not expose cross-field dependencies. A sibling edit, schema replacement,
+or matching registration addition or removal can therefore make a path stale.
+Returning schemas, registrations and complete raw inputs to the committed
+snapshot restores freshness without another run. If the model changes while an
+async validator is pending, any committed snapshot that no longer matches is
+reported stale immediately.
+
+`state.value.validating` reports authoritative work across the scope and matches
+the aggregate purpose of `isValidating`. `stateFor(path).validating` is narrower:
+disjoint targeted paths report their own work independently, while full
+validation covers every path in its participating registrations. Pending work
+does not clear committed issues or the other state flags.
 
 ## Overlapping runs
 
@@ -131,6 +164,18 @@ targeted request made while full validation is active waits and then captures
 fresh input. `isValidating` remains true while full, targeted or queued work is
 pending.
 
+## Resetting state
+
+`resetState()` is a state rebase, not a value reset. It first captures every
+active input. If all captures succeed, current values become the new dirty
+baselines and Verific atomically clears issues, registration results, touch and
+validation history without changing the model.
+
+Successful reset cancels pending full and targeted promises promptly with one
+error named `AbortError`; later validator fulfilment or rejection cannot
+repopulate state. If any capture throws, the original error is rethrown
+synchronously and no baseline, result, interaction or pending authority changes.
+
 ## Registration disposal
 
 A registration remains active while its Vue effect scope is active. When that
@@ -138,10 +183,15 @@ scope is disposed, Verific immediately:
 
 - removes the registration from future validation;
 - removes its committed result and issues from the scope; and
+- removes its dirty baseline and touch records; and
 - ignores its outstanding validator, whether it later fulfils or rejects.
 
-A run does not wait for a disposed registration, so removing a component whose
-validator is still pending can allow the remaining run to complete.
+Disposal revokes outstanding work for that registration and wakes run
+coordination. Aggregate pending and validating state clears when the
+coordinating run promptly settles, not synchronously during unmount. A run does
+not wait for a disposed registration, so removing a component whose validator
+is still pending can allow the remaining run to complete. The changed
+registration set makes affected committed validation stale.
 
 Creating `{ scope: 'new' }` also starts a separate lifecycle. The new scope does
 not inherit message, message-prefix or issue-normalisation policy from an outer
@@ -150,7 +200,7 @@ scope, although application-wide `createVerific` policy remains available.
 ## Failures
 
 Ordinary invalid data resolves rather than rejects: full `validate()` reports
-`success: false`, while `validateFor()` returns the selected issues. Operational
+`success: false`, while `validateAt()` returns the selected issues. Operational
 failures reject either promise. Rejections include:
 
 - a schema validator throwing or returning a rejected promise;
@@ -158,17 +208,20 @@ failures reject either promise. Rejections include:
 - a reactive schema no longer being Standard Schema compliant; and
 - an issue normaliser throwing.
 
+The `AbortError` from a successful `resetState()` is expected cancellation, not
+a schema failure.
+
 When the authoritative run rejects, its partial work is not committed. Previous
 committed issues and registration results remain available. `isValidating`
 returns to `false` once no other full, targeted or queued work remains.
 
 ```ts
-const { validate } = useValidation(schema, model)
+const { state, validate } = useValidation(schema, model)
 
 try {
   const outcome = await validate()
 
-  if (outcome.success) {
+  if (outcome.success && state.value.validated && !state.value.stale) {
     // Submit.
   }
 }
@@ -185,4 +238,5 @@ Calling `useValidation` outside component setup throws immediately. A
 non-compliant non-reactive schema also throws when its registration is created.
 
 Return to the [`useValidation` common members](./use-validation#members-at-a-glance)
-or continue with [Message resolution](./messages).
+or continue with [Form state](../core/form-state), [Advanced schemas](../core/advanced-schemas)
+or [Message resolution](./messages).

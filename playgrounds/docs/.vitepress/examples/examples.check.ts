@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import BasicValidationExample from './BasicValidationExample.vue'
 import FormControlsExample from './FormControlsExample.vue'
+import FormStateExample from './FormStateExample.vue'
 import I18nextValidationExample from './I18nextValidationExample.vue'
 import LocalisedValidationExample from './LocalisedValidationExample.vue'
 import NestedValidationExample from './NestedValidationExample.vue'
@@ -12,6 +13,7 @@ import ParaglideValidationExample from './ParaglideValidationExample.vue'
 enableAutoUnmount(afterEach)
 
 afterEach(() => {
+  vi.useRealTimers()
   document.body.replaceChildren()
   vi.restoreAllMocks()
 })
@@ -22,7 +24,9 @@ function controlForLabel(wrapper: VueWrapper, label: string): DOMWrapper<Element
 
   const controlId = matchingLabel?.attributes('for')
   if (controlId) {
-    return wrapper.get(`#${controlId}`)
+    const control = wrapper.find(`#${controlId}`)
+    expect(control.exists(), `Expected a control labelled "${label}"`).toBe(true)
+    return control
   }
 
   const nestedControl = matchingLabel?.find('input, select, textarea')
@@ -37,6 +41,62 @@ function buttonNamed(wrapper: VueWrapper, name: string): DOMWrapper<Element> {
 }
 
 describe('documentation examples', () => {
+  it('exposes the required fields without making every checkbox mandatory', () => {
+    const basic = mount(BasicValidationExample, { attachTo: document.body })
+    const controls = mount(FormControlsExample, { attachTo: document.body })
+
+    expect(basic.get('form').attributes()).toHaveProperty('novalidate')
+    expect(basic.get('#basic-required-instructions').text()).toBe('All fields are required.')
+    expect(controlForLabel(basic, 'Email address').attributes()).toHaveProperty('required')
+    expect(controlForLabel(basic, 'Password').attributes()).toHaveProperty('required')
+
+    expect(controls.get('form').attributes()).toHaveProperty('novalidate')
+    expect(controls.get('#controls-required-instructions').text()).toBe(
+      'Age, country and at least one interest are required.',
+    )
+    expect(controlForLabel(controls, 'Age').attributes()).toHaveProperty('required')
+    expect(controlForLabel(controls, 'Country').attributes()).toHaveProperty('required')
+    expect(controls.get('legend').text()).toBe('Interests (choose at least one — required)')
+    expect(controls.get('#controls-interests-requirement').text()).toBe(
+      'Choose at least one interest (required).',
+    )
+    for (const choice of [
+      controlForLabel(controls, 'Design'),
+      controlForLabel(controls, 'Testing'),
+    ]) {
+      expect(choice.attributes()).not.toHaveProperty('required')
+      expect(choice.attributes()).not.toHaveProperty('aria-required')
+      expect(choice.attributes('aria-describedby')).toContain('controls-interests-requirement')
+    }
+  })
+
+  it('exposes required fields without making auxiliary controls mandatory', () => {
+    const nested = mount(NestedValidationExample, { attachTo: document.body })
+    const localised = mount(LocalisedValidationExample, { attachTo: document.body })
+    const i18next = mount(I18nextValidationExample, { attachTo: document.body })
+    const paraglide = mount(ParaglideValidationExample, { attachTo: document.body })
+
+    expect(nested.get('#nested-required-instructions').text()).toBe(
+      'Name is required. Phone number is required while its optional section is included.',
+    )
+    expect(nested.get('fieldset').attributes()).not.toHaveProperty('aria-required')
+    expect(controlForLabel(nested, 'Name').attributes()).toHaveProperty('required')
+    expect(controlForLabel(nested, 'Phone number').attributes()).toHaveProperty('required')
+    const includePhone = controlForLabel(nested, 'Include the optional phone component')
+    expect(includePhone.attributes()).not.toHaveProperty('required')
+
+    for (const [wrapper, instructionId] of [
+      [localised, '#localised-demo-required-instructions'],
+      [i18next, '#i18next-demo-required-instructions'],
+      [paraglide, '#paraglide-demo-required-instructions'],
+    ] as const) {
+      expect(wrapper.get('form').attributes()).toHaveProperty('novalidate')
+      expect(wrapper.get(instructionId).text()).toBe('Email is required.')
+      expect(controlForLabel(wrapper, 'Email address').attributes()).toHaveProperty('required')
+      expect(controlForLabel(wrapper, 'Message language').attributes()).not.toHaveProperty('required')
+    }
+  })
+
   it('publishes and clears only the number issue on blur', async () => {
     const wrapper = mount(FormControlsExample, { attachTo: document.body })
     const age = controlForLabel(wrapper, 'Age')
@@ -119,6 +179,12 @@ describe('documentation examples', () => {
     expect(wrapper.get('#controls-interests-errors').text()).toBe('Choose at least one interest')
     expect(wrapper.get('[role="status"]').text()).toBe('Please resolve 3 validation errors.')
     expect(document.activeElement).toBe(age.element)
+
+    await age.setValue('24')
+
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      'The preferences changed after validation. Validate again.',
+    )
   })
 
   it('uses only full validation to report a valid submission', async () => {
@@ -140,6 +206,11 @@ describe('documentation examples', () => {
     await flushPromises()
 
     expect(status.text()).toBe('The preferences are valid.')
+
+    await age.setValue('25')
+    await nextTick()
+
+    expect(status.text()).toBe('The preferences changed after validation. Validate again.')
   })
 
   it('keeps overlapping blur and submit feedback under full-validation authority', async () => {
@@ -208,6 +279,9 @@ describe('documentation examples', () => {
     expect(document.activeElement).toBe(email.element)
 
     await email.setValue('reader@example.com')
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      'The account details changed after validation. Validate again.',
+    )
     await email.trigger('blur')
     await flushPromises()
 
@@ -215,7 +289,9 @@ describe('documentation examples', () => {
     expect(password.attributes('aria-invalid')).toBe('true')
     expect(wrapper.get('#basic-email-errors').text()).toBe('')
     expect(wrapper.get('#basic-password-errors').text()).toBe('Use at least 8 characters')
-    expect(wrapper.get('[role="status"]').text()).toBe('Please resolve 1 validation error.')
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      'The account details changed after validation. Validate again.',
+    )
 
     await password.setValue('correct-horse')
     await password.trigger('blur')
@@ -225,12 +301,43 @@ describe('documentation examples', () => {
     expect(password.attributes('aria-invalid')).toBe('false')
     expect(wrapper.get('#basic-email-errors').text()).toBe('')
     expect(wrapper.get('#basic-password-errors').text()).toBe('')
-    expect(wrapper.get('[role="status"]').text()).toBe('No field errors are shown. Submit the form to confirm.')
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      'The account details changed after validation. Validate again.',
+    )
 
     await buttonNamed(wrapper, 'Validate account').trigger('click')
     await flushPromises()
 
     expect(wrapper.get('[role="status"]').text()).toBe('The account details are valid.')
+
+    await email.setValue('changed@example.com')
+    await nextTick()
+
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      'The account details changed after validation. Validate again.',
+    )
+  })
+
+  it('suppresses output when the model changes during full validation', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(FormStateExample, { attachTo: document.body })
+    const email = controlForLabel(wrapper, 'Email address')
+
+    await buttonNamed(wrapper, 'Validate and transform').trigger('click')
+    await nextTick()
+
+    expect(wrapper.get('[role="status"]').text()).toBe('Validation is running.')
+
+    await email.setValue('changed@example.com')
+    await nextTick()
+    await vi.runAllTimersAsync()
+    await flushPromises()
+
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      'The committed result no longer describes the current model.',
+    )
+    expect(wrapper.get('#state-email-errors').text()).toBe('')
+    expect(wrapper.find('#state-output').exists()).toBe(false)
   })
 
   it('aggregates mounted descendants and removes a disposed child issue immediately', async () => {
@@ -248,7 +355,9 @@ describe('documentation examples', () => {
     await nextTick()
 
     expect(wrapper.find('#nested-phone').exists()).toBe(false)
-    expect(wrapper.get('[role="status"]').text()).toBe('1 committed error is in the parent scope.')
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      'The parent form changed after validation. Validate again.',
+    )
 
     await controlForLabel(wrapper, 'Name').setValue('Ada Lovelace')
     await buttonNamed(wrapper, 'Validate parent form').trigger('click')
@@ -347,6 +456,31 @@ describe('documentation examples', () => {
     expect(missingToggle.attributes('aria-pressed')).toBe('false')
     expect(wrapper.text()).toContain('Validation runs: 1')
     expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('withdraws localisation success feedback after the email changes', async () => {
+    const examples = [
+      [LocalisedValidationExample, 'Validate email'],
+      [I18nextValidationExample, 'Validate with i18next'],
+      [ParaglideValidationExample, 'Validate with Paraglide'],
+    ] as const
+
+    for (const [Example, submitName] of examples) {
+      const wrapper = mount(Example, { attachTo: document.body })
+      const email = controlForLabel(wrapper, 'Email address')
+      const status = wrapper.findAll('[role="status"]').at(-1)!
+
+      await email.setValue('reader@example.com')
+      await buttonNamed(wrapper, submitName).trigger('click')
+      await flushPromises()
+
+      expect(status.text()).toBe('The email address is valid.')
+
+      await email.setValue('changed@example.com')
+
+      expect(status.text()).toBe('The email address changed after validation. Validate again.')
+      wrapper.unmount()
+    }
   })
 
   it('updates a Paraglide message without running the schema again', async () => {

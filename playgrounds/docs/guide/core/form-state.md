@@ -53,6 +53,8 @@ const {
 
 Dirty state compares the current raw registration input with the baseline captured at registration or by `resetState()`. It handles nested plain objects, arrays, cycles, shared references and symbol keys using the same snapshot rules as validation. Missing properties differ from present properties whose value is `undefined`; non-plain objects such as `Date` and `File` compare by identity.
 
+Computed refs, custom refs and objects with accessor properties are the setup-time safety exception: Verific does not evaluate them during registration. Their dirty baseline is deferred until the first successful state or validation capture, so edits made before that capture become the baseline rather than a dirty change.
+
 `resetState()` first snapshots every active registration. If all captures succeed, it atomically:
 
 - rebases dirty state to current values;
@@ -73,7 +75,7 @@ async function onEmailBlur() {
 }
 ```
 
-Calling `validateAt()`, its deprecated `validateFor()` alias or `validate()` alone never marks a path touched. Controller paths are relative to their `at` prefix; orchestration-scope paths are absolute.
+Calling `validateAt()`, its deprecated [`validateFor()` alias](../reference/use-validation#deprecated-validatefor-alias) or `validate()` alone never marks a path touched. Controller paths are relative to their `at` prefix; orchestration-scope paths are absolute.
 
 ## Current results and submission output
 

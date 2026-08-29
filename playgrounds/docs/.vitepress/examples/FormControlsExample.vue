@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { useValidation } from '@verific/core'
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { z } from 'zod'
 
 const ageValue = z.union([z.literal(''), z.number()])
-  .refine(value => value !== '', 'Enter your age')
+  .refine((value): boolean => value !== '', 'Enter your age')
   .refine(
-    value => value === '' || (Number.isInteger(value) && value >= 18),
+    (value): boolean => value === '' || (Number.isInteger(value) && value >= 18),
     'Enter an age of 18 or older',
   )
 
@@ -20,22 +20,30 @@ const age = ref<number | ''>('')
 const country = ref('')
 const interests = ref<string[]>([])
 const readyMessage = 'Submit to validate every field.'
+const validMessage = 'The preferences are valid.'
 const submissionMessage = ref(readyMessage)
-const { errorsFor, hasError, validate, validateFor } = useValidation(schema, {
+const { errorsFor, hasError, state, touch, validate, validateAt } = useValidation(schema, {
   age,
   country,
   interests,
 })
+const visibleSubmissionMessage = computed(() => (
+  state.value.stale
+    ? 'The preferences changed after validation. Validate again.'
+    : submissionMessage.value
+))
 
 async function onAgeBlur() {
   submissionMessage.value = readyMessage
-  await validateFor('age')
+  touch('age')
+  await validateAt('age')
 }
 
 async function onCountryChange(event: Event) {
   country.value = (event.currentTarget as HTMLSelectElement).value
   submissionMessage.value = readyMessage
-  await validateFor('country')
+  touch('country')
+  await validateAt('country')
 }
 
 async function onInterestChange(event: Event) {
@@ -49,38 +57,47 @@ async function onInterestChange(event: Event) {
 
   interests.value = [...nextInterests]
   submissionMessage.value = readyMessage
-  await validateFor('interests')
+  touch('interests')
+  await validateAt('interests')
 }
 
 async function onSubmit() {
   const result = await validate()
 
-  if (result.success) {
-    submissionMessage.value = 'The preferences are valid.'
+  if (!result.success) {
+    const issueCount = result.issues.length
+    submissionMessage.value = `Please resolve ${issueCount} validation ${issueCount === 1 ? 'error' : 'errors'}.`
+
+    await nextTick()
+    const firstField = result.issues[0]?.path[0]
+    const controlId = firstField === 'age'
+      ? 'controls-age'
+      : firstField === 'country'
+        ? 'controls-country'
+        : firstField === 'interests'
+          ? 'controls-interest-design'
+          : undefined
+
+    if (controlId)
+      document.getElementById(controlId)?.focus()
     return
   }
 
-  const issueCount = result.issues.length
-  submissionMessage.value = `Please resolve ${issueCount} validation ${issueCount === 1 ? 'error' : 'errors'}.`
+  if (!state.value.validated || state.value.stale) {
+    submissionMessage.value = 'The preferences changed during validation. Validate again.'
+    return
+  }
 
-  await nextTick()
-  const firstField = result.issues[0]?.path[0]
-  const controlId = firstField === 'age'
-    ? 'controls-age'
-    : firstField === 'country'
-      ? 'controls-country'
-      : firstField === 'interests'
-        ? 'controls-interest-design'
-        : undefined
-
-  if (controlId)
-    document.getElementById(controlId)?.focus()
+  submissionMessage.value = validMessage
 }
 </script>
 
 <template>
   <div class="verific-example">
-    <form novalidate @submit.prevent="onSubmit">
+    <form novalidate aria-describedby="controls-required-instructions" @submit.prevent="onSubmit">
+      <p id="controls-required-instructions" class="verific-example__required">
+        Age, country and at least one interest are required.
+      </p>
       <div class="verific-example__grid">
         <div class="verific-example__field">
           <label for="controls-age">Age</label>
@@ -91,6 +108,7 @@ async function onSubmit() {
             inputmode="numeric"
             min="18"
             step="1"
+            required
             :aria-invalid="hasError('age')"
             aria-describedby="controls-age-errors"
             @blur="onAgeBlur"
@@ -107,6 +125,7 @@ async function onSubmit() {
           <select
             id="controls-country"
             :value="country"
+            required
             :aria-invalid="hasError('country')"
             aria-describedby="controls-country-errors"
             @change="onCountryChange"
@@ -131,10 +150,14 @@ async function onSubmit() {
 
       <fieldset
         class="verific-example__field verific-example__choice-group"
+        data-validation-required-group
         :aria-invalid="hasError('interests')"
-        aria-describedby="controls-interests-errors"
+        aria-describedby="controls-interests-requirement controls-interests-errors"
       >
-        <legend>Interests</legend>
+        <legend>Interests (choose at least one — required)</legend>
+        <p id="controls-interests-requirement" class="verific-example__hint">
+          Choose at least one interest (required).
+        </p>
         <div class="verific-example__choices">
           <label class="verific-example__toggle" for="controls-interest-design">
             <input
@@ -143,7 +166,7 @@ async function onSubmit() {
               value="design"
               :checked="interests.includes('design')"
               :aria-invalid="hasError('interests')"
-              aria-describedby="controls-interests-errors"
+              aria-describedby="controls-interests-requirement controls-interests-errors"
               @change="onInterestChange"
             >
             Design
@@ -155,7 +178,7 @@ async function onSubmit() {
               value="testing"
               :checked="interests.includes('testing')"
               :aria-invalid="hasError('interests')"
-              aria-describedby="controls-interests-errors"
+              aria-describedby="controls-interests-requirement controls-interests-errors"
               @change="onInterestChange"
             >
             Testing
@@ -175,7 +198,7 @@ async function onSubmit() {
       </div>
 
       <p class="verific-example__outcome" role="status" aria-live="polite">
-        {{ submissionMessage }}
+        {{ visibleSubmissionMessage }}
       </p>
     </form>
   </div>

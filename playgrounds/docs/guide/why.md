@@ -6,7 +6,7 @@ outline: deep
 
 Schema libraries validate a value well. Vue forms introduce a coordination problem: the application owns a model, its schemas may be registered by several components, and one submit action must validate them together.
 
-Verific provides that coordination without replacing the schema library or becoming a field-state library.
+Verific provides that coordination without replacing the schema library or taking ownership of form values, DOM controls or submission.
 
 ## What Verific owns
 
@@ -15,16 +15,17 @@ Verific provides that coordination without replacing the schema library or becom
 - Structured **issues**, exact path selection and safe concurrent validation.
 - A resolver seam that derives ready-to-render **errors** from issues.
 - Each registration's typed, potentially transformed output.
+- Dirty baselines, explicit touch records and validation currency for active registrations.
 
 ## What the application owns
 
 - The reactive model and input bindings.
-- Touched, dirty and submit-attempt state.
-- When validation runs and what happens after it succeeds.
+- When interactions call `touch()`, when validation runs and submit-attempt state.
+- What happens after validation succeeds.
 - Error markup, styling and accessibility.
 - Translation catalogues and locale selection.
 
-This separation keeps `useValidation` useful with native inputs, a design system or custom field components. Error arrays are the simplest rendering interface; the optional renderless component only normalises more flexible message inputs.
+Dirty state is derived from the application-owned model. Touched state changes only through an explicit `touch(path)` call; validation and DOM events do not infer it. This separation keeps `useValidation` useful with native inputs, a design system or custom field components. Read [Form state](/guide/core/form-state) for the complete lifecycle.
 
 ## Why Standard Schema?
 
@@ -39,3 +40,5 @@ A single `useValidation(schema, model)` call creates a scope when no scope is av
 Registrations follow Vue's component lifecycle. A removed descendant no longer participates, and a deliberately independent nested form can start a new scope.
 
 Read [scopes and registrations](/guide/core/nested-validation) for the component-tree rules.
+
+For nested objects, repeated rows, custom cross-field paths and discriminated unions, continue with [Advanced schemas](/guide/core/advanced-schemas).

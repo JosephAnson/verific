@@ -70,7 +70,7 @@ A custom key function is also the place to escape dotted field names or handle s
 The adapter is configured once; forms only select their prefix and render the destructured controller members:
 
 ```ts
-const { errorsFor, hasError, validate, validateFor } = useValidation(schema, form, {
+const { errorsFor, hasError, validate, validateAt } = useValidation(schema, form, {
   messagePrefix: 'forms.signup',
 })
 ```

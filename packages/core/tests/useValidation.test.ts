@@ -220,7 +220,7 @@ describe('targeted validation', () => {
     const schema = createSchema<typeof model>('test', validator)
     const mounted = mountValidation(() => useValidation(schema, model), false)
 
-    const targeted = mounted.value.validateFor('confirmation')
+    const targeted = mounted.value.validateAt('confirmation')
     expectTypeOf(targeted).toEqualTypeOf<Promise<TargetValidationResult>>()
     expectTypeOf(mounted.value.validate).returns.toEqualTypeOf<Promise<ValidationResult>>()
     const targetedResult = await targeted
@@ -240,10 +240,10 @@ describe('targeted validation', () => {
     expect(mounted.value.errors.value).toEqual(['Does not match'])
     expect(mounted.value.ownIssues.value).toEqual(mounted.value.issues.value)
     expect(mounted.value.result.value).toEqual({ status: 'idle' })
-    expectTypeOf(mounted.value.validateFor).parameter(0).toEqualTypeOf<'password' | 'confirmation' | 'profile' | readonly PropertyKey[]>()
+    expectTypeOf(mounted.value.validateAt).parameter(0).toEqualTypeOf<'password' | 'confirmation' | 'profile' | readonly PropertyKey[]>()
     if (false) {
       // @ts-expect-error Schema controllers reject unknown top-level keys.
-      void mounted.value.validateFor('missing')
+      void mounted.value.validateAt('missing')
     }
   })
 
@@ -261,7 +261,7 @@ describe('targeted validation', () => {
     const retainedPasswordIssue = mounted.value.issuesFor('password')[0]
 
     email.value = 'valid@example.com'
-    await expect(mounted.value.validateFor('email')).resolves.toEqual({ issues: [] })
+    await expect(mounted.value.validateAt('email')).resolves.toEqual({ issues: [] })
 
     expect(mounted.value.errors.value).toEqual(['Password required'])
     expect(mounted.value.issuesFor('password')[0]).toBe(retainedPasswordIssue)
@@ -279,7 +279,7 @@ describe('targeted validation', () => {
       return shipping
     }, false)
 
-    await mounted.value.validateFor('postcode')
+    await mounted.value.validateAt('postcode')
 
     expect(shippingValidator).toHaveBeenCalledOnce()
     expect(billingValidator).not.toHaveBeenCalled()
@@ -290,7 +290,7 @@ describe('targeted validation', () => {
     const schema = createSchema<unknown>('test', () => ({ issues: [{ message: 'Shipping invalid' }] }))
     const mounted = mountValidation(() => useValidation(schema, {}, { at: ['shipping'] }), false)
 
-    const result = await mounted.value.validateFor([])
+    const result = await mounted.value.validateAt([])
 
     expect(result).toEqual({ issues: mounted.value.issuesFor([]) })
     expect(mounted.value.errorsFor([])).toEqual(['Shipping invalid'])
@@ -305,7 +305,7 @@ describe('targeted validation', () => {
     }))
     const mounted = mountValidation(() => useValidation(schema, { [field]: '' }), false)
 
-    const result = await mounted.value.validateFor(field)
+    const result = await mounted.value.validateAt(field)
 
     expect(result).toEqual({ issues: mounted.value.issuesFor(field) })
     expect(mounted.value.errorsFor(field)).toEqual(['Symbol field invalid'])
@@ -321,9 +321,9 @@ describe('targeted validation', () => {
     }))
     const mounted = mountValidation(() => useValidation(schema, model), false)
 
-    const emailRun = mounted.value.validateFor('email')
+    const emailRun = mounted.value.validateAt('email')
     model.email = 'other'
-    const passwordRun = mounted.value.validateFor('password')
+    const passwordRun = mounted.value.validateAt('password')
     resolvers.get('password')?.({ issues: [{ message: 'Password issue', path: ['password'] }] })
     await passwordRun
     resolvers.get('email')?.({ issues: [{ message: 'Email issue', path: ['email'] }] })
@@ -338,9 +338,9 @@ describe('targeted validation', () => {
     const schema = createSchema<{ email: string }>('test', value => new Promise(resolve => resolvers.set(value.email, resolve)))
     const mounted = mountValidation(() => useValidation(schema, { email }), false)
 
-    const older = mounted.value.validateFor('email')
+    const older = mounted.value.validateAt('email')
     email.value = 'newer'
-    const newer = mounted.value.validateFor('email')
+    const newer = mounted.value.validateAt('email')
     resolvers.get('newer')?.({ issues: [{ message: 'Current', path: ['email'] }] })
 
     const result = await newer
@@ -362,7 +362,7 @@ describe('targeted validation', () => {
     })
     const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
 
-    const target = mounted.value.validateFor('email')
+    const target = mounted.value.validateAt('email')
     const full = mounted.value.validate()
 
     await expect(full).resolves.toMatchObject({ success: false })
@@ -385,7 +385,7 @@ describe('targeted validation', () => {
     const mounted = mountValidation(() => useValidation(schema, { email }), false)
 
     const full = mounted.value.validate()
-    const target = mounted.value.validateFor('email')
+    const target = mounted.value.validateAt('email')
     email.value = 'after'
     resolveFull({ value: { email: 'before' } })
 
@@ -410,7 +410,7 @@ describe('targeted validation', () => {
     const retained = mounted.value.issues.value
     rejectTarget = true
 
-    await expect(mounted.value.validateFor('email')).rejects.toThrow('Unavailable')
+    await expect(mounted.value.validateAt('email')).rejects.toThrow('Unavailable')
     expect(mounted.value.issues.value).toEqual(retained)
   })
 
@@ -432,7 +432,7 @@ describe('targeted validation', () => {
     })
     mountComponent(Parent, false)
 
-    const target = root.validateFor('email')
+    const target = root.validateAt('email')
     showChild.value = false
     await nextTick()
 
@@ -448,7 +448,7 @@ describe('targeted validation', () => {
       messages: () => locale.value === 'en' ? 'Invalid email' : 'Correo no válido',
     }), false)
 
-    await mounted.value.validateFor('email')
+    await mounted.value.validateAt('email')
     locale.value = 'es'
     await nextTick()
 
@@ -462,7 +462,7 @@ describe('targeted validation', () => {
       ? { value: { email: value.email, normalised: true } }
       : { issues: [{ message: 'Invalid email', path: ['email'] }] })
     const mounted = mountValidation(() => useValidation(schema, { email }), false)
-    await mounted.value.validateFor('email')
+    await mounted.value.validateAt('email')
 
     expect(mounted.value.result.value).toEqual({ status: 'idle' })
     email.value = 'valid'
@@ -488,7 +488,7 @@ describe('targeted validation', () => {
     const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
 
     const full = mounted.value.validate()
-    const target = mounted.value.validateFor('email')
+    const target = mounted.value.validateAt('email')
     expect(mounted.value.isValidating.value).toBe(true)
 
     resolveFull({ value: { email: '' } })
@@ -2378,16 +2378,20 @@ describe('form state', () => {
 })
 
 describe('targeted validation interface', () => {
-  it('exposes validateFor as the same no-touch runtime function as validateAt', async () => {
+  it('keeps validateFor as the same no-touch, warning-free runtime function as validateAt', async () => {
     const schema = createSchema<{ email: string }>('test', () => ({
       issues: [{ message: 'Invalid', path: ['email'] }],
     }))
     const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     expect(mounted.value.validateFor).toBe(mounted.value.validateAt)
-    const result = await mounted.value.validateAt('email')
+    expectTypeOf(mounted.value.validateFor).toEqualTypeOf(mounted.value.validateAt)
+
+    const result = await mounted.value.validateFor('email')
     expect(result).toEqual({ issues: mounted.value.issuesFor('email') })
     expect(mounted.value.stateFor('email')).toMatchObject({ touched: false, validated: true })
+    expect(warn).not.toHaveBeenCalled()
   })
 
   it('accepts branch-only top-level union keys and rejects unknown keys', () => {

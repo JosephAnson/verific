@@ -12,15 +12,24 @@ const schema = z.object({
 
 const email = ref('')
 const password = ref('')
-const { errorsFor, hasError, isValidating, issues, result, validate, validateFor } = useValidation(schema, { email, password })
+const { errorsFor, hasError, isValidating, issues, result, state, touch, validate, validateAt } = useValidation(schema, { email, password })
 const outcome = computed(() => {
   const issueCount = issues.value.length
 
   if (result.value.status === 'idle' && issueCount === 0)
     return 'Submit the form to validate it.'
 
-  if (result.value.status === 'valid' && issueCount === 0)
+  if (state.value.stale)
+    return 'The account details changed after validation. Validate again.'
+
+  if (
+    result.value.status === 'valid'
+    && state.value.validated
+    && !state.value.stale
+    && issueCount === 0
+  ) {
     return 'The account details are valid.'
+  }
 
   if (issueCount === 0)
     return 'No field errors are shown. Submit the form to confirm.'
@@ -36,6 +45,11 @@ async function focusFirstInvalid(path: readonly PropertyKey[] | undefined) {
   }
 }
 
+async function onFieldBlur(path: 'email' | 'password') {
+  touch(path)
+  await validateAt(path)
+}
+
 async function onSubmit() {
   const result = await validate()
   if (!result.success) {
@@ -46,7 +60,10 @@ async function onSubmit() {
 
 <template>
   <div class="verific-example">
-    <form novalidate @submit.prevent="onSubmit">
+    <form novalidate aria-describedby="basic-required-instructions" @submit.prevent="onSubmit">
+      <p id="basic-required-instructions" class="verific-example__required">
+        All fields are required.
+      </p>
       <div class="verific-example__grid">
         <div class="verific-example__field">
           <label for="basic-email">Email address</label>
@@ -55,9 +72,10 @@ async function onSubmit() {
             v-model="email"
             type="email"
             autocomplete="email"
+            required
             :aria-invalid="hasError('email')"
             aria-describedby="basic-email-errors"
-            @blur="validateFor('email')"
+            @blur="onFieldBlur('email')"
           >
           <ul id="basic-email-errors" class="verific-example__errors" aria-live="polite" aria-atomic="true">
             <li v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
@@ -73,9 +91,10 @@ async function onSubmit() {
             v-model="password"
             type="password"
             autocomplete="new-password"
+            required
             :aria-invalid="hasError('password')"
             aria-describedby="basic-password-errors"
-            @blur="validateFor('password')"
+            @blur="onFieldBlur('password')"
           >
           <ul id="basic-password-errors" class="verific-example__errors" aria-live="polite" aria-atomic="true">
             <li v-for="(error, index) in errorsFor('password')" :key="`${index}:${error}`">

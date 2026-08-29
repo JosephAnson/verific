@@ -29,26 +29,35 @@ import { z } from 'zod'
 
 const email = ref('')
 const schema = z.object({ email: z.string().email() })
-const { errorsFor, hasError, validate, validateFor } = useValidation(schema, { email })
+const { errorsFor, hasError, state, touch, validate, validateAt } = useValidation(schema, { email })
+
+async function onEmailBlur() {
+  touch('email')
+  await validateAt('email')
+}
 
 async function submit() {
   const result = await validate()
-  if (result.success) {
+  if (result.success && state.value.validated && !state.value.stale) {
     // Submit application-owned state.
   }
 }
 </script>
 
 <template>
-  <form novalidate @submit.prevent="submit">
+  <form novalidate aria-describedby="nuxt-required-instructions" @submit.prevent="submit">
+    <p id="nuxt-required-instructions">
+      Email is required.
+    </p>
     <label for="email">Email</label>
     <input
       id="email"
       v-model="email"
       type="email"
+      required
       :aria-invalid="hasError('email')"
       aria-describedby="email-errors"
-      @blur="validateFor('email')"
+      @blur="onEmailBlur"
     >
     <div id="email-errors" aria-live="polite" aria-atomic="true">
       <p v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
@@ -62,9 +71,10 @@ async function submit() {
 </template>
 ```
 
-The auto-imported `validateFor('email')` runs the complete schema and publishes
-only that exact path; `validate()` remains the full submission gate. Without
-localisation, `errorsFor()` returns the schema's error text. See the
+The auto-imported `validateAt('email')` runs the complete schema and publishes
+only that exact path. `touch('email')` records the blur separately, while
+`validate()` remains the full submission gate. Without localisation,
+`errorsFor()` returns the schema's error text. See the
 [`useValidation` reference](./reference/use-validation) for scopes, paths and
 the complete controller interface.
 

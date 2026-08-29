@@ -18,6 +18,7 @@ const { errorsFor } = useValidation(
       v-model="phone"
       type="tel"
       autocomplete="tel"
+      required
       :aria-invalid="errorsFor('phone').length > 0"
       aria-describedby="nested-phone-errors"
     >

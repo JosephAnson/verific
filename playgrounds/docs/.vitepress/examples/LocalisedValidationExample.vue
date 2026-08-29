@@ -2,7 +2,7 @@
 import type { CatalogueMissingMessageDiagnostic } from '@verific/i18n'
 import { useValidation } from '@verific/core'
 import { vueI18nMessages } from '@verific/vue-i18n'
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { z } from 'zod'
 
@@ -37,7 +37,7 @@ const schema = z.object({
   runCount.value += 1
 })
 const outcome = ref('Validate once, then change the locale.')
-const { errorsFor, isValidating, validate } = useValidation(
+const { errorsFor, isValidating, state, validate } = useValidation(
   schema,
   { email },
   {
@@ -50,6 +50,11 @@ const { errorsFor, isValidating, validate } = useValidation(
     }),
   },
 )
+const visibleOutcome = computed(() => (
+  state.value.stale
+    ? 'The email address changed after validation. Validate again.'
+    : outcome.value
+))
 
 async function onSubmit() {
   const result = await validate()
@@ -60,7 +65,9 @@ async function onSubmit() {
     return
   }
 
-  outcome.value = 'The email address is valid.'
+  outcome.value = state.value.validated && !state.value.stale
+    ? 'The email address is valid.'
+    : 'The email address changed during validation. Validate again.'
 }
 
 function reportMissing(diagnostic: CatalogueMissingMessageDiagnostic) {
@@ -81,7 +88,10 @@ function toggleMissingDemonstration() {
 
 <template>
   <div class="verific-example">
-    <form novalidate @submit.prevent="onSubmit">
+    <form novalidate aria-describedby="localised-demo-required-instructions" @submit.prevent="onSubmit">
+      <p id="localised-demo-required-instructions" class="verific-example__required">
+        Email is required.
+      </p>
       <div class="verific-example__toolbar">
         <div class="verific-example__field">
           <label for="localised-locale">Message language</label>
@@ -106,6 +116,7 @@ function toggleMissingDemonstration() {
           v-model="email"
           type="email"
           autocomplete="email"
+          required
           :aria-invalid="errorsFor('email').length > 0"
           aria-describedby="localised-email-errors"
         >
@@ -141,7 +152,7 @@ function toggleMissingDemonstration() {
       </p>
 
       <p class="verific-example__outcome" role="status" aria-live="polite">
-        {{ outcome }}
+        {{ visibleOutcome }}
       </p>
     </form>
   </div>

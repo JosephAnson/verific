@@ -18,22 +18,27 @@ import { z } from 'zod'
 
 const form = reactive({ email: '' })
 const schema = z.object({ email: z.string().email() })
-const { errorsFor, validate } = useValidation(schema, form)
+const { errorsFor, state, validate } = useValidation(schema, form)
 
 async function submit() {
-  if ((await validate()).success) {
+  const result = await validate()
+  if (result.success && state.value.validated && !state.value.stale) {
     // Submit form.email.
   }
 }
 </script>
 
 <template>
-  <form novalidate @submit.prevent="submit">
+  <form novalidate aria-describedby="required-instructions" @submit.prevent="submit">
+    <p id="required-instructions">
+      Email is required.
+    </p>
     <label for="email">Email</label>
     <input
       id="email"
       v-model="form.email"
       type="email"
+      required
       :aria-invalid="errorsFor('email').length > 0"
       :aria-describedby="errorsFor('email').length ? 'email-errors' : undefined"
     >

@@ -6,11 +6,15 @@ import NestedPhoneField from './NestedPhoneField.vue'
 
 const includePhone = ref(true)
 const hasValidated = ref(false)
-const { isValidating, issues, validate } = useValidation()
+const { isValidating, issues, state, validate } = useValidation()
 
 const outcome = computed(() => {
   if (!hasValidated.value) {
     return 'Submit the parent form to validate every mounted field.'
+  }
+
+  if (state.value.stale) {
+    return 'The parent form changed after validation. Validate again.'
   }
 
   const count = issues.value.length
@@ -24,21 +28,27 @@ const outcome = computed(() => {
 async function onSubmit() {
   const result = await validate()
   hasValidated.value = true
-  if (result.success) {
-    return
-  }
-
-  await nextTick()
-  const firstField = result.issues[0]?.path[0]
-  if (firstField === 'name' || firstField === 'phone') {
-    document.getElementById(`nested-${firstField}`)?.focus()
+  if (!result.success) {
+    await nextTick()
+    const firstField = result.issues[0]?.path[0]
+    if (firstField === 'name' || firstField === 'phone') {
+      document.getElementById(`nested-${firstField}`)?.focus()
+    }
   }
 }
 </script>
 
 <template>
   <div class="verific-example">
-    <form novalidate @submit.prevent="onSubmit">
+    <form
+      novalidate
+      data-validation-required-descendants
+      aria-describedby="nested-required-instructions"
+      @submit.prevent="onSubmit"
+    >
+      <p id="nested-required-instructions" class="verific-example__required">
+        Name is required. Phone number is required while its optional section is included.
+      </p>
       <fieldset>
         <legend>Profile fields registered by descendants</legend>
         <div class="verific-example__grid">

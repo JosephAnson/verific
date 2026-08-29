@@ -66,7 +66,7 @@ Use `missing: 'throw'` in exercised tests to catch missing catalogue entries. De
 Add `messagePrefix: 'forms.signup'` to a form registration for field-specific wording:
 
 ```ts
-const { errorsFor, hasError, validate, validateFor } = useValidation(schema, form, {
+const { errorsFor, hasError, validate, validateAt } = useValidation(schema, form, {
   messagePrefix: 'forms.signup',
 })
 ```

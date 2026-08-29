@@ -40,28 +40,39 @@ import { userSchema } from './user'
 import { registerUser } from './user-service'
 
 const form = reactive({ email: '', displayName: '' })
-const { validate, errorsFor, result } = useValidation(userSchema, form)
+const { errorsFor, result, state, validate } = useValidation(userSchema, form)
 
 async function submit() {
   const outcome = await validate()
-  if (!outcome.success || result.value.status !== 'valid')
+  if (
+    !outcome.success
+    || result.value.status !== 'valid'
+    || !state.value.validated
+    || state.value.stale
+  ) {
     return
+  }
 
-  await registerUser(result.value.value)
+  const user = result.value.value
+  await registerUser(user)
 }
 </script>
 
 <template>
-  <form novalidate @submit.prevent="submit">
+  <form novalidate aria-describedby="registration-required-instructions" @submit.prevent="submit">
+    <p id="registration-required-instructions">
+      All fields are required.
+    </p>
     <label for="email">Email</label>
     <input
       id="email"
       v-model="form.email"
       type="email"
+      required
       :aria-invalid="errorsFor('email').length > 0"
       :aria-describedby="errorsFor('email').length ? 'email-errors' : undefined"
     >
-    <ul v-if="errorsFor('email').length" id="email-errors" aria-live="polite">
+    <ul id="email-errors" aria-live="polite">
       <li v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
         {{ error }}
       </li>
@@ -71,14 +82,11 @@ async function submit() {
     <input
       id="display-name"
       v-model="form.displayName"
+      required
       :aria-invalid="errorsFor('displayName').length > 0"
       :aria-describedby="errorsFor('displayName').length ? 'display-name-errors' : undefined"
     >
-    <ul
-      v-if="errorsFor('displayName').length"
-      id="display-name-errors"
-      aria-live="polite"
-    >
+    <ul id="display-name-errors" aria-live="polite">
       <li
         v-for="(error, index) in errorsFor('displayName')"
         :key="`${index}:${error}`"
@@ -94,6 +102,6 @@ async function submit() {
 </template>
 ```
 
-Here the schema trims both values and lowercases the email. `result.value.value` is that typed transformed output. Verific deliberately does not write it back to `form`.
+Here the schema trims both values and lowercases the email. `result.value.value` is that typed transformed output. The state guard ensures it still describes the current model if validation was asynchronous. Verific deliberately does not write it back to `form`.
 
-The value returned by `validate()` reports whether the whole scope succeeded and contains aggregate issues. The registration's `result` is where its own output lives. Service and network failures are not schema issues; handle them separately.
+The value returned by `validate()` reports whether the whole scope succeeded and contains aggregate issues. The registration's `result` is where its own output lives. The application still decides when to submit and what to do afterwards. Service and network failures are not schema issues; handle them separately.

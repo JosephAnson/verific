@@ -36,7 +36,7 @@ The adapter uses the shared catalogue options from `@verific/i18n`. `fallbackPre
 Forms consume the configured adapter through normal destructured controller members:
 
 ```ts
-const { errorsFor, hasError, validate, validateFor } = useValidation(schema, form, {
+const { errorsFor, hasError, validate, validateAt } = useValidation(schema, form, {
   messagePrefix: 'forms.signup',
 })
 ```

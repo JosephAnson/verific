@@ -8,7 +8,7 @@ import NestedValidationExample from '../../.vitepress/examples/NestedValidationE
 
 # Scopes and registrations
 
-A **scope** groups registrations that must validate together. A **registration** is one schema and model pair.
+A **scope** groups registrations that must validate together. A **registration** is one schema and model pair. Aggregate `state` covers only the registrations that are currently active in that scope.
 
 The simplest call creates both when no scope is available:
 
@@ -29,7 +29,7 @@ const { validate, errorsFor } = useValidation(schema, model)
   </li>
   <li>
     <strong>The parent validates the active collection.</strong>
-    One <code>validate()</code> call runs every current registration and collects their issues. A descendant stops participating when it is disposed.
+    One <code>validate()</code> call runs every current registration and collects their issues. A disposed descendant's dirty and touched contributions leave immediately; outstanding work is revoked and aggregate validating clears when the coordinating run promptly settles.
   </li>
 </ol>
 
@@ -38,7 +38,7 @@ const { validate, errorsFor } = useValidation(schema, model)
 This form's parent calls `useValidation()` without a schema. Its mounted field components each call `useValidation(schema, model)` and automatically join that parent scope.
 
 1. Select **Validate parent form** with both fields empty. The parent reports two committed errors collected from its descendants.
-2. Clear **Include the optional phone component**. The phone component is disposed and its committed issue immediately leaves the parent scope; no second validation is needed.
+2. Clear **Include the optional phone component**. The phone component is disposed and its committed issue immediately leaves the parent scope, while the changed registration set makes the earlier full result stale.
 3. Enter a name and validate again to see the shared scope succeed.
 
 <NestedValidationExample />
@@ -63,18 +63,26 @@ import { useValidation } from '@verific/core'
 import ContactDetails from './ContactDetails.vue'
 import PostalAddress from './PostalAddress.vue'
 
-const { validate, issues } = useValidation()
+const { issues, state, validate } = useValidation()
 
 async function submit() {
   const outcome = await validate()
-  if (outcome.success) {
+  if (outcome.success && state.value.validated && !state.value.stale) {
     // Submit application-owned state.
   }
 }
 </script>
 
 <template>
-  <form novalidate @submit.prevent="submit">
+  <form
+    novalidate
+    data-validation-required-descendants
+    aria-describedby="contact-required-instructions"
+    @submit.prevent="submit"
+  >
+    <p id="contact-required-instructions">
+      Complete every required contact and postal address field.
+    </p>
     <ContactDetails />
     <PostalAddress />
     <button type="submit">
@@ -106,6 +114,7 @@ const { errorsFor, hasError } = useValidation(schema, details)
   <input
     id="contact-email"
     v-model="details.email"
+    required
     :aria-invalid="hasError('email')"
     :aria-describedby="hasError('email') ? 'contact-email-errors' : undefined"
   >
@@ -117,9 +126,41 @@ const { errorsFor, hasError } = useValidation(schema, details)
 </template>
 ```
 
+The postal-address descendant follows the same registration pattern:
+
+```vue [PostalAddress.vue]
+<script setup lang="ts">
+import { useValidation } from '@verific/core'
+import { reactive } from 'vue'
+import { z } from 'zod'
+
+const address = reactive({ postcode: '' })
+const schema = z.object({ postcode: z.string().min(1, 'Enter a postcode') })
+const { errorsFor, hasError } = useValidation(schema, address)
+</script>
+
+<template>
+  <label for="postal-postcode">Postcode</label>
+  <input
+    id="postal-postcode"
+    v-model="address.postcode"
+    required
+    :aria-invalid="hasError('postcode')"
+    :aria-describedby="hasError('postcode') ? 'postal-postcode-errors' : undefined"
+  >
+  <div id="postal-postcode-errors" aria-live="polite">
+    <p v-for="(error, index) in errorsFor('postcode')" :key="`${index}:${error}`">
+      {{ error }}
+    </p>
+  </div>
+</template>
+```
+
 ## Component-tree rules
 
 A call can join only a scope created earlier in the same component setup or provided by an ancestor. It cannot discover a scope created later, by a sibling, or in another component branch.
+
+Disposal immediately removes a registration's issues, result, dirty baseline and touch records. Outstanding work for that registration is revoked, while aggregate pending and validating state clears when the coordinating run promptly settles rather than synchronously during disposal. Because the participating registration set changed, affected committed validation becomes stale. If another active registration contributes to the same resolved path, its contribution remains. See [Form state](./form-state) for the aggregate and exact selectors.
 
 The nearest scope wins. Start an independent nested form explicitly:
 
@@ -151,4 +192,4 @@ errorsFor(['location', 'postcode'])
 
 ## Next task
 
-Continue with [choose between issues and errors](/guide/core/issues-and-errors) to use structured failures for application logic and resolved strings for display.
+Continue with [choose between issues and errors](/guide/core/issues-and-errors) to use structured failures for application logic and resolved strings for display, or [Advanced schemas](/guide/core/advanced-schemas) for complex paths and structural changes.
