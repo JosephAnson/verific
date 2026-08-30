@@ -165,7 +165,7 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
     `,
   })
   await assertTypes(directory, `
-    import type { TargetValidationResult, ValidationResult, ValidationState } from '@verific/core'
+    import type { TargetValidationResult, ValidationIssue, ValidationResult, ValidationState } from '@verific/core'
     import { ErrorMessages, createVerific, useValidation } from '@verific/core'
     import { reactive } from 'vue'
     createVerific()
@@ -200,15 +200,24 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
     const validation = useValidation(schema, model)
     const aggregateState: ValidationState = validation.state.value
     const exactState: ValidationState = validation.stateFor(['profile', 'name'])
+    const exactIssues: readonly ValidationIssue[] = validation.issuesFor('email')
+    const exactErrors: readonly string[] = validation.errorsFor('email')
+    const hasExactError: boolean = validation.hasError('email')
     const fullResult: Promise<ValidationResult> = validation.validate()
     const targetResult: Promise<TargetValidationResult> = validation.validateAt('email')
     validation.touch('email')
     validation.resetState()
-    void [aggregateState, exactState, fullResult, targetResult]
+    void [aggregateState, exactState, exactIssues, exactErrors, hasExactError, fullResult, targetResult]
 
     if (false) {
       // @ts-expect-error Schema controllers reject unknown top-level keys.
       validation.stateFor('missing')
+      // @ts-expect-error Schema controllers reject unknown top-level keys.
+      validation.issuesFor('missing')
+      // @ts-expect-error Schema controllers reject unknown top-level keys.
+      validation.errorsFor('missing')
+      // @ts-expect-error Schema controllers reject unknown top-level keys.
+      validation.hasError('missing')
       // @ts-expect-error Schema controllers reject unknown top-level keys.
       validation.touch('missing')
       // @ts-expect-error Schema controllers reject unknown top-level keys.
@@ -254,8 +263,27 @@ function coreStateExercise() {
       assertState(validation.stateFor('email'), { dirty: false }, 'Reverted email state')
 
       const targetedResult = await validation.validateAt('email')
-      if (targetedResult.issues.length !== 1 || validation.errorFor('email') !== 'Email is required') {
+      const emailIssues = validation.issuesFor('email')
+      const emailErrors = validation.errorsFor('email')
+      if (
+        targetedResult.issues.length !== 1
+        || emailIssues.length !== 1
+        || emailIssues[0]?.message !== 'Email is required'
+        || emailErrors.length !== 1
+        || emailErrors[0] !== 'Email is required'
+        || validation.errorFor('email') !== 'Email is required'
+        || !validation.hasError('email')
+      ) {
         throw new Error('Packed targeted validation did not publish the exact email issue')
+      }
+      const unrelatedPath = ['profile', 'name']
+      if (
+        validation.issuesFor(unrelatedPath).length !== 0
+        || validation.errorsFor(unrelatedPath).length !== 0
+        || validation.errorFor(unrelatedPath) !== undefined
+        || validation.hasError(unrelatedPath)
+      ) {
+        throw new Error('Packed targeted validation published an unrelated profile issue')
       }
       assertState(validation.state.value, { touched: false, validated: false, stale: false }, 'Targeted aggregate state')
       assertState(validation.stateFor('email'), { touched: false, validated: true, stale: false }, 'Targeted email state')
