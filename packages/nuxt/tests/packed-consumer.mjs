@@ -195,10 +195,23 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
     import { ErrorMessages, createVerific, useValidation } from '@verific/core'
     createVerific()
     useValidation
-    const errorMessagesProps: InstanceType<typeof ErrorMessages>['$props'] = { messages: 'Required' }
+    type ErrorMessagesProps = InstanceType<typeof ErrorMessages>['$props']
+    const errorMessagesProps: ErrorMessagesProps = { messages: 'Required' }
     errorMessagesProps.messages
+
+    // @ts-expect-error ErrorMessages requires messages.
+    const missingErrorMessagesProps: ErrorMessagesProps = {}
+    // @ts-expect-error ErrorMessages rejects unsupported message values.
+    const invalidErrorMessagesProps: ErrorMessagesProps = { messages: 42 }
+
     declare const errorMessages: InstanceType<typeof ErrorMessages>
     errorMessages.$slots.default?.({ message: 'Required', index: 0 })
+    // @ts-expect-error The default slot requires a string message.
+    errorMessages.$slots.default?.({ message: 42, index: 0 })
+    // @ts-expect-error The default slot requires a numeric index.
+    errorMessages.$slots.default?.({ message: 'Required', index: '0' })
+    // @ts-expect-error The default slot requires the complete payload.
+    errorMessages.$slots.default?.({ message: 'Required' })
   `, { skipLibCheck: false })
 }
 
