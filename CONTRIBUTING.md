@@ -65,7 +65,8 @@ Each package must use these exact npm trusted publisher settings:
 | Setting | Value |
 | --- | --- |
 | Provider | GitHub Actions |
-| Repository | `JosephAnson/verific` |
+| Organisation or user | `JosephAnson` |
+| Repository | `verific` |
 | Workflow | `publish.yml` |
 | Environment | `release` |
 | Allowed action | `npm publish` |
