@@ -1,6 +1,5 @@
 import type { MessageContext, ValidationIssue } from '@verific/core'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { computed, nextTick, ref } from 'vue'
 import { paraglideMessages } from '../src/main'
 import { errors_min_items } from './fixtures/generated/messages/errors_min_items.js'
 import { errors_required } from './fixtures/generated/messages/errors_required.js'
@@ -106,22 +105,6 @@ describe('paraglideMessages', () => {
 
     expect(resolve(issue([], 'withCount', { minimum: 2, count: 99 }, 0), adapter)).toBe('2:0:en')
     expect(resolve(issue([], 'withoutCount', { minimum: 2, count: 99 }), adapter)).toBe('2:false:en')
-  })
-
-  it('reacts to a caller-owned locale source without rerunning validation', async () => {
-    const locale = ref<'en' | 'nl'>('en')
-    const adapter = paraglideMessages({ 'errors.required': errors_required }, {
-      locale: () => locale.value,
-      fallbackPrefix: 'errors',
-    })
-    const message = computed(() => resolve(issue(), adapter))
-
-    expect(message.value).toBe('Required')
-
-    locale.value = 'nl'
-    await nextTick()
-
-    expect(message.value).toBe('Verplicht')
   })
 
   it('keeps locale and missing-message state isolated between SSR requests', () => {

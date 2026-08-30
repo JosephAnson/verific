@@ -100,31 +100,6 @@ afterEach(() => {
 })
 
 describe('createCatalogueMessages', () => {
-  it('resolves field keys before global keys across the complete locale chain', () => {
-    const lookup = vi.fn((key: string, locale: string) => {
-      const messages: Readonly<Record<string, string>> = {
-        'fr:errors.invalidEmail': 'Erreur globale',
-        'en:forms.signup.email.invalidEmail': 'Use a valid email',
-      }
-      const message = messages[`${locale}:${key}`]
-      return message === undefined
-        ? { resolved: false as const }
-        : { resolved: true as const, message }
-    })
-    const adapter = createCatalogueMessages({ locales: () => ['fr', 'en'], lookup }, {
-      fallbackPrefix: 'errors',
-    })
-
-    expect(adapter.resolve(context(issue()))).toEqual({
-      resolved: true,
-      message: 'Use a valid email',
-    })
-    expect(lookup.mock.calls.map(([key, locale]) => [key, locale])).toEqual([
-      ['forms.signup.email.invalidEmail', 'fr'],
-      ['forms.signup.email.invalidEmail', 'en'],
-    ])
-  })
-
   it('returns every miss in key-first order and removes duplicate keys and locales', () => {
     const adapter = createCatalogueMessages(missingDriver(['en', 'nl', 'en']), {
       fallbackPrefix: 'errors',

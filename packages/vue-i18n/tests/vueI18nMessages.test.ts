@@ -5,7 +5,7 @@ import type {
 } from '@verific/core'
 import { createVerific, useValidation } from '@verific/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createApp, defineComponent, h, nextTick, ref } from 'vue'
+import { createApp, defineComponent, h, ref } from 'vue'
 import { createI18n, useI18n } from 'vue-i18n'
 import { vueI18nMessages } from '../src/main'
 
@@ -99,25 +99,6 @@ describe('vueI18nMessages', () => {
     expect(adapter.resolve(context(value))).toEqual({
       resolved: true,
       message: 'At least 3 characters',
-    })
-  })
-
-  it('tries every locale for the field key before the active-locale global key', () => {
-    const i18n = createI18n({
-      legacy: false,
-      locale: 'fr',
-      fallbackLocale: ['en'],
-      missingWarn: false,
-      fallbackWarn: false,
-      messages: {
-        fr: { errors: { invalidEmail: 'Erreur globale' } },
-        en: { forms: { signup: { email: { invalidEmail: 'Field fallback' } } } },
-      },
-    })
-
-    expect(vueI18nMessages(i18n.global, { fallbackPrefix: 'errors' }).resolve(context(issue()))).toEqual({
-      resolved: true,
-      message: 'Field fallback',
     })
   })
 
@@ -413,43 +394,6 @@ describe('vueI18nMessages', () => {
       { locale: 'nl', keys: ['errors.invalidEmail'] },
       { locale: 'en', keys: ['errors.invalidEmail'] },
     ])
-  })
-
-  it('updates committed messages when the supplied Composer locale changes', async () => {
-    const i18n = createI18n({
-      legacy: false,
-      locale: 'en',
-      fallbackLocale: false,
-      messages: {
-        en: { errors: { invalid: 'English message' } },
-        nl: { errors: { invalid: 'Nederlands bericht' } },
-      },
-    })
-    const schema = {
-      '~standard': {
-        version: 1 as const,
-        vendor: 'test',
-        validate: () => ({ issues: [{ message: 'Schema message', path: ['email'] }] }),
-      },
-    }
-    let validation: ReturnType<typeof useValidation<typeof schema>> | undefined
-    const app = createApp(defineComponent({
-      setup() {
-        validation = useValidation(schema, ref({ email: '' }), {
-          messages: vueI18nMessages(i18n.global, { fallbackPrefix: 'errors' }),
-        })
-        return () => h('div')
-      },
-    }))
-    app.mount(document.createElement('div'))
-
-    await validation?.validate()
-    expect(validation?.errors.value).toEqual(['English message'])
-
-    i18n.global.locale.value = 'nl'
-    await nextTick()
-    expect(validation?.errors.value).toEqual(['Nederlands bericht'])
-    app.unmount()
   })
 
   it('uses warn by default in development and remains silent by default in production', () => {

@@ -79,22 +79,6 @@ describe('i18nextMessages', () => {
     adapter.dispose()
   })
 
-  it('uses key-first lookup across the caller-owned language chain', async () => {
-    const i18n = await instance({
-      fallbackLng: 'en',
-      lng: 'fr',
-      resources: {
-        en: { translation: { forms: { signup: { email: { invalidEmail: 'Use a valid email' } } } } },
-        fr: { translation: { errors: { invalidEmail: 'Adresse incorrecte' } } },
-      },
-    })
-    const adapter = i18nextMessages(i18n, { fallbackPrefix: 'errors' })
-
-    expect(resolvedMessage(adapter)).toBe('Use a valid email')
-
-    adapter.dispose()
-  })
-
   it('passes one identical exact-locale options object to exists and t', async () => {
     const i18n = await instance({
       resources: {
@@ -165,23 +149,6 @@ describe('i18nextMessages', () => {
     const adapter = i18nextMessages(i18n)
 
     expect(resolvedMessage(adapter)).toBe(key)
-
-    adapter.dispose()
-  })
-
-  it('reacts to language changes without another schema invocation', async () => {
-    const i18n = await instance({
-      resources: {
-        en: { translation: { errors: { invalidEmail: 'English' } } },
-        fr: { translation: { errors: { invalidEmail: 'Français' } } },
-      },
-    })
-    const adapter = i18nextMessages(i18n, { fallbackPrefix: 'errors' })
-    const message = computed(() => resolvedMessage(adapter))
-
-    expect(message.value).toBe('English')
-    await i18n.changeLanguage('fr')
-    expect(message.value).toBe('Français')
 
     adapter.dispose()
   })

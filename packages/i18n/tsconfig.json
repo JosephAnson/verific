@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es2017",
     "lib": ["esnext", "es2017", "dom"],
-    "rootDir": ".",
+    "rootDir": "../..",
     "module": "esnext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -16,5 +16,5 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true
   },
-  "include": ["src/**/*", "tests/**/*"]
+  "include": ["src/**/*", "tests/**/*", "../../tests/support/localeAdapterConformance.ts"]
 }
