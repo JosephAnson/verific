@@ -35,9 +35,9 @@
 
 - [ ] T04 Integrate the accepted deep modules, resolve only cross-scope regressions and run the complete repository and strict OpenSpec gates.
   - Depends on: T01, T02, T03
-  - Writes: packages/core/src/**, packages/core/tests/**, playgrounds/docs/scripts/**, tests/support/**, packages/i18n/tests/**, packages/i18n/tsconfig.json, packages/i18next/tests/**, packages/i18next/tsconfig.json, packages/vue-i18n/tests/**, packages/vue-i18n/tsconfig.json, packages/paraglide/tests/**, packages/paraglide/tsconfig.json
+  - Writes: packages/core/src/**, packages/core/tests/**, playgrounds/docs/scripts/**, tests/support/**, packages/i18n/tests/**, packages/i18n/tsconfig.json, packages/i18next/tests/**, packages/i18next/tsconfig.json, packages/vue-i18n/tests/**, packages/vue-i18n/tsconfig.json, packages/paraglide/tests/**, packages/paraglide/tsconfig.json, packages/nuxt/tsconfig.json
   - Locks: core-validation-internals, docs-rendered-audit, locale-adapter-conformance
   - Estimate: medium
-  - Acceptance: All task revisions coexist without public export or declaration drift; direct validation-state and lazy Error reads require no `nextTick()` while genuine Vue lifecycle/DOM waits remain explicit; full lint, tests, coverage, package type-check/build, playground builds, docs checks, Nuxt integration and strict OpenSpec validation pass.
+  - Acceptance: All task revisions coexist without public export or declaration drift; direct validation-state and lazy Error reads require no `nextTick()` while genuine Vue lifecycle/DOM waits remain explicit; the Nuxt package type-check does not traverse another workspace package's tests; full lint, tests, coverage, package type-check/build, playground builds, docs checks, Nuxt integration and strict OpenSpec validation pass.
   - Verify changed: pnpm lint && pnpm packages:typecheck && pnpm test && pnpm build
   - Verify: pnpm test:coverage && pnpm playgrounds:build && pnpm docs:check && pnpm test:integration && openspec validate deepen-validation-architecture --type change --strict --json --no-interactive
