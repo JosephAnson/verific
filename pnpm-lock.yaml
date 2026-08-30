@@ -147,6 +147,9 @@ importers:
 
   packages/vue-i18n:
     dependencies:
+      '@intlify/devtools-types':
+        specifier: 11.1.12
+        version: 11.1.12
       '@verific/i18n':
         specifier: workspace:^
         version: link:../i18n
@@ -1328,6 +1331,10 @@ packages:
 
   '@intlify/core-base@11.1.12':
     resolution: {integrity: sha512-whh0trqRsSqVLNEUCwU59pyJZYpU8AmSWl8M3Jz2Mv5ESPP6kFh4juas2NpZ1iCvy7GlNRffUD1xr84gceimjg==}
+    engines: {node: '>= 16'}
+
+  '@intlify/devtools-types@11.1.12':
+    resolution: {integrity: sha512-WYgdadYwOxZOAuhiCirQy2yjs7ZLBLEpllkbTbBEjFA7RsvzztJuYaEhHM+NIssyBcWWiWyC+IjgL2wnfK4uUQ==}
     engines: {node: '>= 16'}
 
   '@intlify/message-compiler@11.1.12':
@@ -8423,6 +8430,11 @@ snapshots:
   '@intlify/core-base@11.1.12':
     dependencies:
       '@intlify/message-compiler': 11.1.12
+      '@intlify/shared': 11.1.12
+
+  '@intlify/devtools-types@11.1.12':
+    dependencies:
+      '@intlify/core-base': 11.1.12
       '@intlify/shared': 11.1.12
 
   '@intlify/message-compiler@11.1.12':

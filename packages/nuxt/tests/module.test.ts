@@ -54,12 +54,15 @@ describe('nuxt module', () => {
   })
 
   it('keeps the auto-import but performs no plugin work in manual mode', () => {
-    moduleDefinition.setup({ global: false }, createNuxt())
+    const nuxt = createNuxt()
+
+    moduleDefinition.setup({ global: false }, nuxt)
 
     expect(kit.addPlugin).not.toHaveBeenCalled()
     expect(kit.addPluginTemplate).not.toHaveBeenCalled()
     expect(kit.tryResolveModule).not.toHaveBeenCalled()
     expect(kit.addImports).toHaveBeenCalledWith({ name: 'useValidation', from: '@verific/core' })
+    expect(nuxt.options.build.transpile).toEqual([])
   })
 
   it('ignores stale message configuration instead of restoring localisation behaviour', () => {

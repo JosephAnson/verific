@@ -25,16 +25,16 @@ export default defineNuxtModule<ModuleOptions>().with({
     global: true,
   },
   setup(options, nuxt) {
-    const { resolve } = createResolver(import.meta.url)
-    const runtimeDir = fileURLToPath(new URL('./runtime', import.meta.url))
-
-    nuxt.options.build.transpile.push(runtimeDir)
-
     addImports({ name: 'useValidation', from: '@verific/core' })
 
     if (!options.global) {
       return
     }
+
+    const { resolve } = createResolver(import.meta.url)
+    const runtimeDir = fileURLToPath(new URL('./runtime', import.meta.url))
+
+    nuxt.options.build.transpile.push(runtimeDir)
 
     addPlugin({
       src: resolve('./runtime/plugin'),
