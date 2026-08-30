@@ -13,7 +13,7 @@
     "url": "git+https://github.com/JosephAnson/verific.git"
   },
   "engines": {
-    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+    "node": "^22.22.2 || ^24.15.0 || ^26.0.0"
   },
   "scripts": {
     "setup": "pnpm build && pnpm --dir playgrounds/nuxt exec nuxt prepare",

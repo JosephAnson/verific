@@ -144,39 +144,20 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
   ])
   assertDeclaration(directory, '@verific/core', 'dist/main.d.ts')
 
+  const stateExercise = coreStateExercise()
   await assertModuleFormats(directory, {
     esm: `
       import { createVerific, useValidation } from '@verific/core'
-      import { createSSRApp, h } from 'vue'
+      import { createSSRApp, h, reactive } from 'vue'
       import { renderToString } from 'vue/server-renderer'
-      const schema = { '~standard': { version: 1, vendor: 'packed-consumer', validate: value => ({ issues: [{ message: 'Email is required', path: ['email'] }] }) } }
-      let validation
-      const app = createSSRApp({
-        setup() {
-          validation = useValidation(schema, { email: '' })
-          return () => h('main')
-        },
-      }).use(createVerific())
-      await renderToString(app)
-      const result = await validation.validate()
-      if (result.success || validation.errorFor('email') !== 'Email is required') throw new Error('Packed core validation failed')
+      ${stateExercise}
     `,
     cjs: `
       const { createVerific, useValidation } = require('@verific/core')
-      const { createSSRApp, h } = require('vue')
+      const { createSSRApp, h, reactive } = require('vue')
       const { renderToString } = require('vue/server-renderer')
-      const schema = { '~standard': { version: 1, vendor: 'packed-consumer', validate: value => ({ issues: [{ message: 'Email is required', path: ['email'] }] }) } }
       ;(async () => {
-        let validation
-        const app = createSSRApp({
-          setup() {
-            validation = useValidation(schema, { email: '' })
-            return () => h('main')
-          },
-        }).use(createVerific())
-        await renderToString(app)
-        const result = await validation.validate()
-        if (result.success || validation.errorFor('email') !== 'Email is required') throw new Error('Packed core validation failed')
+        ${stateExercise}
       })().catch((error) => {
         console.error(error)
         process.exitCode = 1
@@ -184,9 +165,10 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
     `,
   })
   await assertTypes(directory, `
+    import type { TargetValidationResult, ValidationResult, ValidationState } from '@verific/core'
     import { ErrorMessages, createVerific, useValidation } from '@verific/core'
+    import { reactive } from 'vue'
     createVerific()
-    useValidation
     type ErrorMessagesProps = InstanceType<typeof ErrorMessages>['$props']
     const errorMessagesProps: ErrorMessagesProps = { messages: 'Required' }
     errorMessagesProps.messages
@@ -204,7 +186,126 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
     errorMessages.$slots.default?.({ message: 'Required', index: '0' })
     // @ts-expect-error The default slot requires the complete payload.
     errorMessages.$slots.default?.({ message: 'Required' })
+
+    type Model = { email: string, profile: { name: string } }
+    const model = reactive<Model>({ email: '', profile: { name: '' } })
+    const schema = {
+      '~standard': {
+        version: 1 as const,
+        vendor: 'packed-consumer',
+        types: undefined as unknown as { input: Model, output: Model },
+        validate: (value: unknown) => ({ value: value as Model }),
+      },
+    }
+    const validation = useValidation(schema, model)
+    const aggregateState: ValidationState = validation.state.value
+    const exactState: ValidationState = validation.stateFor(['profile', 'name'])
+    const fullResult: Promise<ValidationResult> = validation.validate()
+    const targetResult: Promise<TargetValidationResult> = validation.validateAt('email')
+    validation.touch('email')
+    validation.resetState()
+    void [aggregateState, exactState, fullResult, targetResult]
+
+    if (false) {
+      // @ts-expect-error Schema controllers reject unknown top-level keys.
+      validation.stateFor('missing')
+      // @ts-expect-error Schema controllers reject unknown top-level keys.
+      validation.touch('missing')
+      // @ts-expect-error Schema controllers reject unknown top-level keys.
+      validation.validateAt('missing')
+      // @ts-expect-error Validation state is readonly.
+      aggregateState.dirty = true
+    }
   `)
+}
+
+function coreStateExercise() {
+  return `
+    function assertState(actual, expected, label) {
+      for (const [key, value] of Object.entries(expected)) {
+        if (actual[key] !== value) {
+          throw new Error(label + ' expected ' + key + ' to be ' + value + ', received ' + actual[key])
+        }
+      }
+    }
+
+    const model = reactive({ email: '', profile: { name: '' } })
+    const schema = {
+      '~standard': {
+        version: 1,
+        vendor: 'packed-consumer',
+        validate: value => value.email
+          ? { value }
+          : { issues: [{ message: 'Email is required', path: ['email'] }] },
+      },
+    }
+    let validation
+    const app = createSSRApp({
+      setup() {
+        validation = useValidation(schema, model)
+        return () => h('main')
+      },
+    }).use(createVerific())
+    await renderToString(app)
+
+    const idle = { dirty: false, touched: false, validated: false, stale: false, validating: false }
+    assertState(validation.state.value, idle, 'Initial aggregate state')
+    assertState(validation.stateFor('email'), idle, 'Initial email state')
+
+    model.email = 'edited@example.com'
+    assertState(validation.state.value, { dirty: true }, 'Edited aggregate state')
+    assertState(validation.stateFor('email'), { dirty: true }, 'Edited email state')
+    assertState(validation.stateFor(['profile', 'name']), { dirty: false }, 'Unchanged profile state')
+    model.email = ''
+    assertState(validation.state.value, { dirty: false }, 'Reverted aggregate state')
+    assertState(validation.stateFor('email'), { dirty: false }, 'Reverted email state')
+
+    const targetedResult = await validation.validateAt('email')
+    if (targetedResult.issues.length !== 1 || validation.errorFor('email') !== 'Email is required') {
+      throw new Error('Packed targeted validation did not publish the exact email issue')
+    }
+    assertState(validation.state.value, { touched: false, validated: false, stale: false }, 'Targeted aggregate state')
+    assertState(validation.stateFor('email'), { touched: false, validated: true, stale: false }, 'Targeted email state')
+    assertState(validation.stateFor(['profile', 'name']), { touched: false, validated: false }, 'Untargeted profile state')
+    if (validation.result.value.status !== 'idle') {
+      throw new Error('Targeted validation replaced the full result')
+    }
+
+    model.profile.name = 'Ada'
+    assertState(validation.stateFor('email'), { stale: true }, 'Changed targeted input state')
+    model.profile.name = ''
+    assertState(validation.stateFor('email'), { stale: false }, 'Reverted targeted input state')
+
+    const fullResult = await validation.validate()
+    if (fullResult.success || validation.errorFor('email') !== 'Email is required') {
+      throw new Error('Packed full validation did not publish the email issue')
+    }
+    assertState(validation.state.value, { touched: false, validated: true, stale: false }, 'Validated aggregate state')
+    assertState(validation.stateFor('email'), { touched: false, validated: true, stale: false }, 'Validated email state')
+    assertState(validation.stateFor(['profile', 'name']), { touched: false, validated: true, stale: false }, 'Validated profile state')
+
+    model.email = 'saved@example.com'
+    assertState(validation.stateFor('email'), { dirty: true, stale: true }, 'Changed validated email state')
+    model.email = ''
+    assertState(validation.stateFor('email'), { dirty: false, stale: false }, 'Reverted validated email state')
+
+    validation.touch('email')
+    assertState(validation.state.value, { touched: true }, 'Touched aggregate state')
+    assertState(validation.stateFor('email'), { touched: true }, 'Touched email state')
+    assertState(validation.stateFor(['profile', 'name']), { touched: false }, 'Untouched profile state')
+
+    model.email = 'saved@example.com'
+    validation.resetState()
+    if (model.email !== 'saved@example.com' || validation.issues.value.length !== 0 || validation.result.value.status !== 'idle') {
+      throw new Error('Packed reset did not preserve values and clear validation output')
+    }
+    assertState(validation.state.value, idle, 'Reset aggregate state')
+    assertState(validation.stateFor('email'), idle, 'Reset email state')
+    model.email = 'next@example.com'
+    assertState(validation.stateFor('email'), { dirty: true }, 'Post-reset changed email state')
+    model.email = 'saved@example.com'
+    assertState(validation.stateFor('email'), { dirty: false }, 'Post-reset reverted email state')
+  `
 }
 
 async function assertSharedI18nConsumer(temporaryRoot, tarballs) {

@@ -19,5 +19,5 @@ export function createMessageArray(messages: MaybeRef<Messages>): string[] {
     return Object.keys(conditionalMessages).filter(key => conditionalMessages[key])
   }
 
-  return [value]
+  return typeof value === 'string' ? [value] : []
 }

@@ -1,6 +1,6 @@
 import type { App, Ref } from 'vue'
 import type { Messages } from '../src/main'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, defineComponent, h, nextTick, ref, unref } from 'vue'
 import { ErrorMessages } from '../src/main'
 
@@ -36,6 +36,14 @@ describe('errorMessages', () => {
     const container = mountMessages('Email is required')
 
     expect(container.childElementCount).toBe(0)
+  })
+
+  it('does not render or expose an unsupported boolean message', () => {
+    const renderMessage = vi.fn(({ message }: { message: string }) => h('p', message))
+    const container = mountMessages(true as never, renderMessage)
+
+    expect(container.childElementCount).toBe(0)
+    expect(renderMessage).not.toHaveBeenCalled()
   })
 
   it('updates slot content when messages change', async () => {

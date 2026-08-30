@@ -1169,6 +1169,16 @@ describe('form state', () => {
     expect(root.state.value.touched).toBe(false)
   })
 
+  it('does not infer interaction from full validation', async () => {
+    const schema = createSchema<{ email: string }>('test', value => ({ value }))
+    const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
+
+    await mounted.value.validate()
+
+    expect(mounted.value.state.value.touched).toBe(false)
+    expect(mounted.value.stateFor('email').touched).toBe(false)
+  })
+
   it('tracks full and exact validation history on the same stack', async () => {
     const firstSchema = createSchema<{ email: string, password: string }>('test', value => ({ value }))
     const secondSchema = createSchema<{ email: string, password: string }>('test', value => ({ value }))
