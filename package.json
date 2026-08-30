@@ -27,6 +27,7 @@
     "audit": "pnpm audit --audit-level high",
     "dependencies:check": "pnpm outdated -r --format json && pnpm audit",
     "packages:typecheck": "pnpm -r --filter \"./packages/**\" typecheck",
+    "packages:compatibility": "pnpm -r --filter @verific/core --filter @verific/i18n --filter @verific/i18next --filter @verific/paraglide --filter @verific/vue-i18n exec publint --strict && pnpm -r --filter @verific/core --filter @verific/i18n --filter @verific/i18next --filter @verific/paraglide --filter @verific/vue-i18n exec attw --pack . --profile strict",
     "typecheck": "pnpm build && pnpm packages:typecheck && pnpm --dir playgrounds/vue type-check && pnpm --dir playgrounds/nuxt exec nuxi typecheck",
     "dev": "cd ./playgrounds/nuxt && pnpm dev",
     "dev:docs": "cd ./playgrounds/docs && pnpm dev",
@@ -35,7 +36,7 @@
     "docs:build": "pnpm --dir playgrounds/docs build",
     "docs:check": "pnpm --dir playgrounds/docs check",
     "playgrounds:build": "pnpm --dir playgrounds/vue build && pnpm --dir playgrounds/nuxt build",
-    "check": "pnpm dependencies:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm playgrounds:build && pnpm docs:check && pnpm test:integration",
+    "check": "pnpm dependencies:check && pnpm lint && pnpm typecheck && pnpm packages:compatibility && pnpm test:coverage && pnpm playgrounds:build && pnpm docs:check && pnpm test:integration",
     "release": "bumpp package.json packages/core/package.json packages/i18n/package.json packages/i18next/package.json packages/paraglide/package.json packages/vue-i18n/package.json packages/nuxt/package.json",
     "release:check": "node scripts/check-release-version.mjs",
     "publish:ci": "pnpm release:check --publish && pnpm check && pnpm -r --filter \"./packages/**\" publish --access public --no-git-checks"
@@ -45,6 +46,7 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "^9.3.0",
+    "@arethetypeswrong/cli": "^0.18.5",
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
     "@types/node": "^24.13.3",
@@ -55,6 +57,7 @@
     "eslint": "^10.9.1",
     "jsdom": "^30.0.1",
     "lint-staged": "^17.4.1",
+    "publint": "^0.3.24",
     "typescript": "5.9.3",
     "vitest": "^4.1.11",
     "vue": "^3.5.42"
