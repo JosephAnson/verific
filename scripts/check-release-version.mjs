@@ -1,22 +1,37 @@
+import { execFileSync } from 'node:child_process'
 import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
-export function checkReleaseVersions({ rootManifest, packageManifests, publish = false, refType, tag }) {
+const stableVersionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/
+
+export function checkReleaseVersions({
+  rootManifest,
+  packageManifests,
+  publish = false,
+  refType,
+  tag,
+  checkMainAncestry = isHeadOnOriginMain,
+}) {
   const problems = []
   const rootVersion = rootManifest.manifest.version
 
   if (rootManifest.manifest.private !== true)
     problems.push(`${rootManifest.path} must set "private": true so the repository root cannot be published.`)
 
-  if (typeof rootVersion !== 'string' || rootVersion.length === 0)
-    problems.push(`${rootManifest.path} must define a non-empty string "version".`)
+  if (!isStableVersion(rootVersion))
+    problems.push(stableVersionProblem(rootManifest.path, rootVersion))
 
   const publicPackageManifests = packageManifests.filter(({ manifest }) => manifest.private !== true)
 
   if (publicPackageManifests.length === 0)
     problems.push('No public package manifests were found under packages/*/package.json.')
+
+  for (const packageManifest of publicPackageManifests) {
+    if (!isStableVersion(packageManifest.manifest.version))
+      problems.push(stableVersionProblem(packageManifest.path, packageManifest.manifest.version))
+  }
 
   if (publish) {
     if (typeof tag !== 'string' || tag.length === 0)
@@ -48,9 +63,46 @@ export function checkReleaseVersions({ rootManifest, packageManifests, publish =
   if (problems.length > 0)
     throw new Error(`Release version check failed:\n${problems.map(problem => `- ${problem}`).join('\n')}`)
 
+  if (publish) {
+    let isOnMain
+    try {
+      isOnMain = checkMainAncestry()
+    }
+    catch (error) {
+      throw new Error(
+        `Release version check failed:\n- Could not verify that HEAD is an ancestor of origin/main: ${formatError(error)}`,
+        { cause: error },
+      )
+    }
+
+    if (isOnMain !== true) {
+      throw new Error(
+        'Release version check failed:\n- HEAD must be an ancestor of origin/main in publish mode. Fetch complete origin/main history and publish only a tag created from reviewed main history.',
+      )
+    }
+  }
+
   return {
     publicPackageCount: publicPackageManifests.length,
     version: rootVersion,
+  }
+}
+
+export function isHeadOnOriginMain(runGit = execFileSync) {
+  try {
+    runGit('git', ['merge-base', '--is-ancestor', 'HEAD', 'origin/main'], {
+      stdio: 'pipe',
+    })
+    return true
+  }
+  catch (error) {
+    if (error && typeof error === 'object' && error.status === 1)
+      return false
+
+    throw new Error(
+      `git merge-base --is-ancestor HEAD origin/main failed unexpectedly: ${formatGitError(error)}`,
+      { cause: error },
+    )
   }
 }
 
@@ -91,6 +143,28 @@ async function readManifest(repositoryRoot, manifestPath) {
 
 function formatValue(value) {
   return JSON.stringify(value) ?? String(value)
+}
+
+function formatError(error) {
+  return error instanceof Error ? error.message : formatValue(error)
+}
+
+function formatGitError(error) {
+  if (error && typeof error === 'object' && 'stderr' in error) {
+    const stderr = String(error.stderr).trim()
+    if (stderr.length > 0)
+      return stderr
+  }
+
+  return formatError(error)
+}
+
+function isStableVersion(version) {
+  return typeof version === 'string' && stableVersionPattern.test(version)
+}
+
+function stableVersionProblem(path, version) {
+  return `${path} must use a stable x.y.z version without prerelease, build metadata or leading zeroes; received ${formatValue(version)}.`
 }
 
 async function main() {

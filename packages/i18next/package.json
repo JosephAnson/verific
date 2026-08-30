@@ -1,7 +1,7 @@
 {
   "name": "@verific/i18next",
   "type": "commonjs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "i18next message adapter for Verific",
   "author": {
     "name": "Joseph Anson",
