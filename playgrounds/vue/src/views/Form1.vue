@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useValidation } from '@verific/core'
-import InputText from 'primevue/inputtext'
 import { ref } from 'vue'
 import { z } from 'zod'
 
@@ -37,7 +36,7 @@ async function onSubmit(event: Event) {
     </h1>
     <form class="space-y-4" @submit="onSubmit">
       <div class="flex-col flex">
-        <InputText v-model="email" type="email" />
+        <input v-model="email" type="email">
         <span
           v-for="(error, index) in errorsFor('email')"
           :key="`${index}:${error}`"
@@ -45,7 +44,7 @@ async function onSubmit(event: Event) {
         >{{ error }}</span>
       </div>
       <div class="flex-col flex">
-        <InputText v-model="password" type="password" />
+        <input v-model="password" type="password">
         <span
           v-for="(error, index) in errorsFor('password')"
           :key="`${index}:${error}`"

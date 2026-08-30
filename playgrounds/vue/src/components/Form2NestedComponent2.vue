@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useValidation } from '@verific/core'
-import InputText from 'primevue/inputtext'
 import { ref } from 'vue'
 import { z } from 'zod'
 
@@ -19,7 +18,7 @@ const { errorsFor } = useValidation(schema, {
   <div class="container">
     <div class="flex-col flex">
       <label for="lastName">Last Name</label>
-      <InputText id="lastName" v-model="lastName" type="text" />
+      <input id="lastName" v-model="lastName" type="text">
       <span
         v-for="(error, index) in errorsFor('lastName')"
         :key="`${index}:${error}`"

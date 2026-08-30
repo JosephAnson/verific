@@ -22,8 +22,6 @@ packages:
   - playgrounds/*
 
 overrides:
-  # Changelogithub pins an older changelogen release with a vulnerable tar chain.
-  changelogithub>changelogen: 0.6.2
   # Patch the esbuild development-server advisory in upstream build tooling.
   esbuild@>=0.27.3 <0.28.1: 0.28.2
   typescript: 5.9.3
@@ -36,13 +34,14 @@ peerDependencyRules:
 
 update:
   ignoreDeps:
-    # PrimeVue 5 and Themes 3 use the PrimeUI licence rather than MIT.
-    - '@primeuix/themes'
-    - primevue
     # Match the Node 24 runtime used locally and in CI.
     - '@types/node'
     # Vue and Nuxt tooling do not yet support the TypeScript 7 compiler API.
     - typescript
+    # Vue I18n 11.4 imports GenericComponentInstance, absent from stable Vue 3.5.
+    # Keep its matching devtools declarations on the tested 11.1.12 line too.
+    - '@intlify/devtools-types'
+    - vue-i18n
 
 allowBuilds:
   esbuild: true
