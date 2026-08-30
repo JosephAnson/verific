@@ -98,7 +98,7 @@ The tested baselines match each adapter package's peer dependencies.
 
 | Adapter | Direct locale runtime | Supported range | Tested baseline |
 | --- | --- | --- | --- |
-| `@verific/vue-i18n` | `vue-i18n` | `>=11.1 <12` | `11.1.12` |
+| `@verific/vue-i18n` | `vue-i18n` | `>=11.1.12 <11.2` | `11.1.12` |
 | `@verific/i18next` | `i18next` | `>=26 <27` | `26.4.0` |
 | `@verific/i18next` | `vue` (reactivity) | `^3.4.26` | `^3.5.42` |
 | `@verific/paraglide` | `@inlang/paraglide-js` | `>=2 <3` | `2.25.0` |
