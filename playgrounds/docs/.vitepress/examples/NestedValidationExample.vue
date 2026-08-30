@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useValidation } from '@verific/core'
-import { computed, nextTick, ref } from 'vue'
+import { computed, ref } from 'vue'
 import NestedNameField from './NestedNameField.vue'
 import NestedPhoneField from './NestedPhoneField.vue'
 
@@ -29,7 +29,6 @@ async function onSubmit() {
   const result = await validate()
   hasValidated.value = true
   if (!result.success) {
-    await nextTick()
     const firstField = result.issues[0]?.path[0]
     if (firstField === 'name' || firstField === 'phone') {
       document.getElementById(`nested-${firstField}`)?.focus()

@@ -294,12 +294,21 @@ describe('advanced schema example', () => {
     const addContact = buttonNamed(wrapper, 'Add blank contact')
 
     await addContact.trigger('click')
+    await addContact.trigger('click')
     await flushPromises()
 
     const removeSecond = buttonNamed(wrapper, 'Remove contact 2')
     const removeSecondElement = removeSecond.element as HTMLElement
     removeSecondElement.focus()
     await removeSecond.trigger('click')
+    await nextTick()
+
+    const remainingSecond = buttonNamed(wrapper, 'Remove contact 2')
+    expect(remainingSecond.attributes('id')).toBe('advanced-remove-contact-1')
+    expect(document.activeElement).toBe(remainingSecond.element)
+    await flushPromises()
+
+    await remainingSecond.trigger('click')
     await nextTick()
 
     const remainingRemove = buttonNamed(wrapper, 'Remove contact 1')

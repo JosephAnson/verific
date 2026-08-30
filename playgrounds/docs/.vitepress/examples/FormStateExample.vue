@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useValidation } from '@verific/core'
-import { computed, nextTick, reactive } from 'vue'
+import { computed, reactive } from 'vue'
 import { z } from 'zod'
 
 const schema = z.object({
@@ -82,7 +82,6 @@ async function onSubmit() {
   if (!result)
     return
   if (!result.success) {
-    await nextTick()
     for (const issue of result.issues) {
       const key = issue.path.join('.')
       const controlId = key === 'profile.name'

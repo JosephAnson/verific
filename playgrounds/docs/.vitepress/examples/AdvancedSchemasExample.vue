@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { IssueNormaliser } from '@verific/core'
 import { useValidation } from '@verific/core'
-import { nextTick, ref } from 'vue'
+import { ref } from 'vue'
 import { z } from 'zod'
 
 const commonFields = {
@@ -101,14 +101,15 @@ async function addContact() {
 }
 
 async function removeContact(index: number) {
+  const lastIndex = model.value.contacts.length - 1
+  const focusTargetId = lastIndex === 0
+    ? 'advanced-add-contact'
+    : index < lastIndex
+      ? `advanced-remove-contact-${index}`
+      : `advanced-remove-contact-${index - 1}`
+  document.getElementById(focusTargetId)?.focus()
   model.value.contacts.splice(index, 1)
   const validation = runFullValidation()
-  await nextTick()
-  const adjacentIndex = Math.min(index, model.value.contacts.length - 1)
-  const focusTargetId = adjacentIndex >= 0
-    ? `advanced-remove-contact-${adjacentIndex}`
-    : 'advanced-add-contact'
-  document.getElementById(focusTargetId)?.focus()
   await validation
   announcement.value = 'Removed a positional row and ran full validation.'
 }
@@ -127,7 +128,6 @@ async function onSubmit() {
   }
 
   announcement.value = `Resolve ${validation.issues.length} validation ${validation.issues.length === 1 ? 'error' : 'errors'}.`
-  await nextTick()
   focusFirstIssue(validation.issues.map(issue => issue.path))
 }
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useValidation } from '@verific/core'
-import { computed, nextTick, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { z } from 'zod'
 
 const schema = z.object({
@@ -37,8 +37,7 @@ const outcome = computed(() => {
   return `Please resolve ${issueCount} validation ${issueCount === 1 ? 'error' : 'errors'}.`
 })
 
-async function focusFirstInvalid(path: readonly PropertyKey[] | undefined) {
-  await nextTick()
+function focusFirstInvalid(path: readonly PropertyKey[] | undefined) {
   const field = path?.[0]
   if (field === 'email' || field === 'password') {
     document.getElementById(`basic-${field}`)?.focus()
@@ -53,7 +52,7 @@ async function onFieldBlur(path: 'email' | 'password') {
 async function onSubmit() {
   const result = await validate()
   if (!result.success) {
-    await focusFirstInvalid(result.issues[0]?.path)
+    focusFirstInvalid(result.issues[0]?.path)
   }
 }
 </script>

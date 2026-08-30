@@ -2,7 +2,7 @@
 import type { CatalogueMissingMessageDiagnostic } from '@verific/i18n'
 import { useValidation } from '@verific/core'
 import { vueI18nMessages } from '@verific/vue-i18n'
-import { computed, nextTick, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { z } from 'zod'
 
@@ -60,7 +60,6 @@ async function onSubmit() {
   const result = await validate()
   if (!result.success) {
     outcome.value = 'The committed error is translated when the locale changes.'
-    await nextTick()
     document.getElementById('localised-email')?.focus()
     return
   }

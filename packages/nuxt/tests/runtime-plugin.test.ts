@@ -91,11 +91,13 @@ describe('nuxt runtime plugin', () => {
 
     try {
       await validation.validate()
+      expect(validation.errorFor('email')).toBe('Enter an email address')
       await nextTick()
       expect(host.textContent).toBe('Enter an email address')
       expect(validate).toHaveBeenCalledOnce()
 
       i18n.global.locale.value = 'nl'
+      expect(validation.errorFor('email')).toBe('Vul een e-mailadres in')
       await nextTick()
       expect(host.textContent).toBe('Vul een e-mailadres in')
       expect(validate).toHaveBeenCalledOnce()

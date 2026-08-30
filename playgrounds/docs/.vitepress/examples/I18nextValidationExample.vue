@@ -3,7 +3,7 @@ import type { CatalogueMissingMessageDiagnostic } from '@verific/i18n'
 import { useValidation } from '@verific/core'
 import { i18nextMessages } from '@verific/i18next'
 import { createInstance } from 'i18next'
-import { computed, nextTick, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { z } from 'zod'
 
 const i18n = createInstance()
@@ -53,7 +53,6 @@ async function onSubmit() {
   const result = await validate()
   if (!result.success) {
     outcome.value = 'The committed error is translated when the locale changes.'
-    await nextTick()
     document.getElementById('i18next-email')?.focus()
     return
   }

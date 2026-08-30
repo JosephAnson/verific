@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useValidation } from '@verific/core'
-import { computed, nextTick, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { z } from 'zod'
 
 const ageValue = z.union([z.literal(''), z.number()])
@@ -68,7 +68,6 @@ async function onSubmit() {
     const issueCount = result.issues.length
     submissionMessage.value = `Please resolve ${issueCount} validation ${issueCount === 1 ? 'error' : 'errors'}.`
 
-    await nextTick()
     const firstField = result.issues[0]?.path[0]
     const controlId = firstField === 'age'
       ? 'controls-age'

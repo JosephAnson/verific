@@ -25,6 +25,12 @@ const {
 
 `state` is a computed aggregate. `stateFor(path)` returns the exact-path snapshot and remains reactive when called in a template or caller-owned computed.
 
+For registrations with an established dirty baseline, model changes, `touch()`
+and `resetState()` are reflected by the selectors on the same JavaScript stack.
+When `validate()` or `validateAt()` resolves, its publication is already
+committed. Reading Verific state never requires `nextTick()`; waiting for Vue to
+patch the DOM is a separate concern.
+
 | Flag | Meaning |
 | --- | --- |
 | `dirty` | The current raw model differs structurally from its baseline. Reverting a value makes it clean again. |
