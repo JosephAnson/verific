@@ -239,72 +239,75 @@ function coreStateExercise() {
           : { issues: [{ message: 'Email is required', path: ['email'] }] },
       },
     }
-    let validation
+
+    async function exerciseValidation(validation) {
+      const idle = { dirty: false, touched: false, validated: false, stale: false, validating: false }
+      assertState(validation.state.value, idle, 'Initial aggregate state')
+      assertState(validation.stateFor('email'), idle, 'Initial email state')
+
+      model.email = 'edited@example.com'
+      assertState(validation.state.value, { dirty: true }, 'Edited aggregate state')
+      assertState(validation.stateFor('email'), { dirty: true }, 'Edited email state')
+      assertState(validation.stateFor(['profile', 'name']), { dirty: false }, 'Unchanged profile state')
+      model.email = ''
+      assertState(validation.state.value, { dirty: false }, 'Reverted aggregate state')
+      assertState(validation.stateFor('email'), { dirty: false }, 'Reverted email state')
+
+      const targetedResult = await validation.validateAt('email')
+      if (targetedResult.issues.length !== 1 || validation.errorFor('email') !== 'Email is required') {
+        throw new Error('Packed targeted validation did not publish the exact email issue')
+      }
+      assertState(validation.state.value, { touched: false, validated: false, stale: false }, 'Targeted aggregate state')
+      assertState(validation.stateFor('email'), { touched: false, validated: true, stale: false }, 'Targeted email state')
+      assertState(validation.stateFor(['profile', 'name']), { touched: false, validated: false }, 'Untargeted profile state')
+      if (validation.result.value.status !== 'idle') {
+        throw new Error('Targeted validation replaced the full result')
+      }
+
+      model.profile.name = 'Ada'
+      assertState(validation.stateFor('email'), { stale: true }, 'Changed targeted input state')
+      model.profile.name = ''
+      assertState(validation.stateFor('email'), { stale: false }, 'Reverted targeted input state')
+
+      const fullResult = await validation.validate()
+      if (fullResult.success || validation.errorFor('email') !== 'Email is required') {
+        throw new Error('Packed full validation did not publish the email issue')
+      }
+      assertState(validation.state.value, { touched: false, validated: true, stale: false }, 'Validated aggregate state')
+      assertState(validation.stateFor('email'), { touched: false, validated: true, stale: false }, 'Validated email state')
+      assertState(validation.stateFor(['profile', 'name']), { touched: false, validated: true, stale: false }, 'Validated profile state')
+
+      model.email = 'saved@example.com'
+      assertState(validation.stateFor('email'), { dirty: true, stale: true }, 'Changed validated email state')
+      model.email = ''
+      assertState(validation.stateFor('email'), { dirty: false, stale: false }, 'Reverted validated email state')
+
+      validation.touch('email')
+      assertState(validation.state.value, { touched: true }, 'Touched aggregate state')
+      assertState(validation.stateFor('email'), { touched: true }, 'Touched email state')
+      assertState(validation.stateFor(['profile', 'name']), { touched: false }, 'Untouched profile state')
+
+      model.email = 'saved@example.com'
+      validation.resetState()
+      if (model.email !== 'saved@example.com' || validation.issues.value.length !== 0 || validation.result.value.status !== 'idle') {
+        throw new Error('Packed reset did not preserve values and clear validation output')
+      }
+      assertState(validation.state.value, idle, 'Reset aggregate state')
+      assertState(validation.stateFor('email'), idle, 'Reset email state')
+      model.email = 'next@example.com'
+      assertState(validation.stateFor('email'), { dirty: true }, 'Post-reset changed email state')
+      model.email = 'saved@example.com'
+      assertState(validation.stateFor('email'), { dirty: false }, 'Post-reset reverted email state')
+    }
+
     const app = createSSRApp({
-      setup() {
-        validation = useValidation(schema, model)
+      async setup() {
+        const validation = useValidation(schema, model)
+        await exerciseValidation(validation)
         return () => h('main')
       },
     }).use(createVerific())
     await renderToString(app)
-
-    const idle = { dirty: false, touched: false, validated: false, stale: false, validating: false }
-    assertState(validation.state.value, idle, 'Initial aggregate state')
-    assertState(validation.stateFor('email'), idle, 'Initial email state')
-
-    model.email = 'edited@example.com'
-    assertState(validation.state.value, { dirty: true }, 'Edited aggregate state')
-    assertState(validation.stateFor('email'), { dirty: true }, 'Edited email state')
-    assertState(validation.stateFor(['profile', 'name']), { dirty: false }, 'Unchanged profile state')
-    model.email = ''
-    assertState(validation.state.value, { dirty: false }, 'Reverted aggregate state')
-    assertState(validation.stateFor('email'), { dirty: false }, 'Reverted email state')
-
-    const targetedResult = await validation.validateAt('email')
-    if (targetedResult.issues.length !== 1 || validation.errorFor('email') !== 'Email is required') {
-      throw new Error('Packed targeted validation did not publish the exact email issue')
-    }
-    assertState(validation.state.value, { touched: false, validated: false, stale: false }, 'Targeted aggregate state')
-    assertState(validation.stateFor('email'), { touched: false, validated: true, stale: false }, 'Targeted email state')
-    assertState(validation.stateFor(['profile', 'name']), { touched: false, validated: false }, 'Untargeted profile state')
-    if (validation.result.value.status !== 'idle') {
-      throw new Error('Targeted validation replaced the full result')
-    }
-
-    model.profile.name = 'Ada'
-    assertState(validation.stateFor('email'), { stale: true }, 'Changed targeted input state')
-    model.profile.name = ''
-    assertState(validation.stateFor('email'), { stale: false }, 'Reverted targeted input state')
-
-    const fullResult = await validation.validate()
-    if (fullResult.success || validation.errorFor('email') !== 'Email is required') {
-      throw new Error('Packed full validation did not publish the email issue')
-    }
-    assertState(validation.state.value, { touched: false, validated: true, stale: false }, 'Validated aggregate state')
-    assertState(validation.stateFor('email'), { touched: false, validated: true, stale: false }, 'Validated email state')
-    assertState(validation.stateFor(['profile', 'name']), { touched: false, validated: true, stale: false }, 'Validated profile state')
-
-    model.email = 'saved@example.com'
-    assertState(validation.stateFor('email'), { dirty: true, stale: true }, 'Changed validated email state')
-    model.email = ''
-    assertState(validation.stateFor('email'), { dirty: false, stale: false }, 'Reverted validated email state')
-
-    validation.touch('email')
-    assertState(validation.state.value, { touched: true }, 'Touched aggregate state')
-    assertState(validation.stateFor('email'), { touched: true }, 'Touched email state')
-    assertState(validation.stateFor(['profile', 'name']), { touched: false }, 'Untouched profile state')
-
-    model.email = 'saved@example.com'
-    validation.resetState()
-    if (model.email !== 'saved@example.com' || validation.issues.value.length !== 0 || validation.result.value.status !== 'idle') {
-      throw new Error('Packed reset did not preserve values and clear validation output')
-    }
-    assertState(validation.state.value, idle, 'Reset aggregate state')
-    assertState(validation.stateFor('email'), idle, 'Reset email state')
-    model.email = 'next@example.com'
-    assertState(validation.stateFor('email'), { dirty: true }, 'Post-reset changed email state')
-    model.email = 'saved@example.com'
-    assertState(validation.stateFor('email'), { dirty: false }, 'Post-reset reverted email state')
   `
 }
 
