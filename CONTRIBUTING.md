@@ -73,7 +73,9 @@ Each package must use these exact npm trusted publisher settings:
 
 The publish job authenticates to npm with GitHub Actions OIDC. Do not create or store a long-lived npm access token, including an `NPM_TOKEN` repository or environment secret.
 
-Create a GitHub environment named `release`, restrict it to protected release tags matching `v*`, and require maintainer approval before deployment. Protect the same `v*` tag pattern with a repository ruleset so only release maintainers can create, update or delete release tags.
+Create a GitHub environment named `release`. Under **Deployment branches and tags**, choose **Selected branches and tags**, add a tag rule for `v*`, and add no branch rule. Configure required reviewers so a maintainer must approve each deployment.
+
+Protect release tags with two repository tag rulesets targeting `v*`. In the first, enable **Restrict creations** and give the repository administrator role bypass permission so the owner, acting as release maintainer, can create matching tags. In the second, enable **Restrict updates** and **Restrict deletions** with no bypass actor. A release tag is immutable once publication starts: do not move or delete it. For this user-owned repository, emergency recovery requires an owner-controlled temporary change to the second ruleset. Treat it as a break-glass action: document and approve the reason before use, record the change and restoration for audit, and restore the ruleset immediately afterwards.
 
 For each tagged release, the workflow must complete in this order:
 
@@ -81,7 +83,7 @@ For each tagged release, the workflow must complete in this order:
 2. Publish all six packages to npm.
 3. Create the GitHub Release only after every npm publication succeeds.
 
-If a run fails after publishing only some packages, keep the existing version, commit and tag. Do not unpublish completed packages or create another version. Safely rerun the workflow for the same tag: already published package-version pairs are treated as complete, only missing packages are published, and the GitHub Release is created once all six packages are available on npm.
+If a run fails after publishing only some packages, rerun the workflow for the same tag only when the failure is transient or external and the immutable release commit and package contents are already correct. Keep the existing version, commit and tag, and do not unpublish completed packages: already published package-version pairs are treated as complete, only missing packages are published, and the GitHub Release is created once all six packages are available on npm. If any package contents need to change, do not move or reuse the tag or try to replace a published package version. npm package versions are immutable, so make the corrections and create a new coordinated workspace version, release commit and matching tag.
 
 GitHub Releases are the canonical public release history. Keep release notes there rather than in package-specific changelogs.
 
