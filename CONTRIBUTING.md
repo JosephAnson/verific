@@ -47,6 +47,43 @@ The integrated check covers linting, strict package and playground type checks, 
 
 The documentation site uses VitePress and lives in `playgrounds/docs`. Keep examples aligned with the compiling Vue and Nuxt playgrounds.
 
+## Releasing
+
+Verific releases as one workspace. Run `pnpm release` from the repository root; it is the sole versioning entry point. Follow its prompts to select the new version and publish the resulting release commit and tag. The root manifest and every public package manifest must always use the same version, and the corresponding Git tag must be `v${version}`. Do not version or tag an individual package separately.
+
+Configure trusted publishing for every public package:
+
+- `@verific/core`
+- `@verific/i18n`
+- `@verific/i18next`
+- `@verific/vue-i18n`
+- `@verific/paraglide`
+- `@verific/nuxt`
+
+Each package must use these exact npm trusted publisher settings:
+
+| Setting | Value |
+| --- | --- |
+| Provider | GitHub Actions |
+| Repository | `JosephAnson/verific` |
+| Workflow | `publish.yml` |
+| Environment | `release` |
+| Allowed action | `npm publish` |
+
+The publish job authenticates to npm with GitHub Actions OIDC. Do not create or store a long-lived npm access token, including an `NPM_TOKEN` repository or environment secret.
+
+Create a GitHub environment named `release`, restrict it to protected release tags matching `v*`, and require maintainer approval before deployment. Protect the same `v*` tag pattern with a repository ruleset so only release maintainers can create, update or delete release tags.
+
+For each tagged release, the workflow must complete in this order:
+
+1. Verify that the tag, workspace version and all package manifests agree, then run the release checks.
+2. Publish all six packages to npm.
+3. Create the GitHub Release only after every npm publication succeeds.
+
+If a run fails after publishing only some packages, keep the existing version, commit and tag. Do not unpublish completed packages or create another version. Safely rerun the workflow for the same tag: already published package-version pairs are treated as complete, only missing packages are published, and the GitHub Release is created once all six packages are available on npm.
+
+GitHub Releases are the canonical public release history. Keep release notes there rather than in package-specific changelogs.
+
 ## Commits and pull requests
 
 Use conventional commit messages with a concise subject. Pull requests should explain the problem, the chosen behaviour and how it was verified. Link a minimal reproduction when fixing a consumer-facing bug.

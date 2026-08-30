@@ -28,8 +28,8 @@ body:
     id: version
     attributes:
       label: Versions
-      description: Which versions of Vue, Verific, Nuxt and your schema library are you using?
-      placeholder: Vue 3.5, @verific/core 0.0.2, Zod 4.4
+      description: Provide the exact installed versions of Vue, Nuxt, every relevant Verific package and your schema library.
+      placeholder: Vue x.y.z, @verific/core x.y.z, @verific/nuxt x.y.z, Zod x.y.z
     validations:
       required: true
   - type: checkboxes
