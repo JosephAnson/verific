@@ -51,7 +51,7 @@
   },
   "peerDependencies": {
     "@verific/core": "workspace:^",
-    "vue-i18n": ">=11.4 <12"
+    "vue-i18n": ">=11.1 <12"
   },
   "dependencies": {
     "@verific/i18n": "workspace:^"
