@@ -16,7 +16,7 @@
   - Writes: playgrounds/docs/scripts/check-docs.mjs, playgrounds/docs/scripts/rendered-validation-audit.mjs
   - Locks: docs-rendered-audit
   - Estimate: large
-  - Acceptance: Each Markdown snippet and rendered page remains a separate root; parsed-unit caching, reached imported files, lexical loop bindings, slot fallback, cycle detection, canonical paths, symlink protection, ID resolution, accessibility checks, failure text and check order remain intact; all 153 mutation fixtures and the real documentation audit pass; checker-only optional, skip and required-group declarations remain confined to fixture strings.
+  - Acceptance: Each Markdown snippet and rendered page remains a separate root; parsed-unit caching, reached imported files, lexical loop bindings, slot fallback, cycle detection, canonical paths, symlink protection, ID resolution, accessibility checks, failure text and check order remain intact; all 153 mutation fixtures and the real documentation audit pass; optional, skip and required-group declarations occur in rendered documentation only where the expanded AST or native HTML semantics cannot prove the intent safely.
   - Verify changed: pnpm exec eslint playgrounds/docs/scripts/check-docs.mjs playgrounds/docs/scripts/rendered-validation-audit.mjs --max-warnings 0 && node playgrounds/docs/scripts/check-docs.mjs --self-test && node playgrounds/docs/scripts/check-docs.mjs
   - Verify: pnpm --filter @verific/docs check
 

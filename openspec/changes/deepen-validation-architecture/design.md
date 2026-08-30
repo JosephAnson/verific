@@ -56,7 +56,7 @@ Create `playgrounds/docs/scripts/rendered-validation-audit.mjs` with one high-le
 
 Keep Markdown/file discovery, navigation and source-disclosure checks, adapter compatibility, reporting and the 153-case fixture harness in `check-docs.mjs`. Each Markdown snippet and rendered page remains a separate audit root, while parsed units and reached imports remain shared across roots. This avoids false duplicate-ID collisions and prevents imported fields being audited without their parent form.
 
-The remaining optional, skip and required-group declarations stay inside checker fixtures because their intent cannot be inferred safely. No checker-only declaration belongs in rendered documentation.
+Optional, skip and required-group declarations stay in rendered documentation only where their intent cannot be inferred safely from the expanded Vue AST or native HTML semantics. Fixture declarations continue to exercise each contract. No redundant checker-only declaration belongs in rendered documentation.
 
 ### 6. Share observable Locale adapter conformance tests
 
