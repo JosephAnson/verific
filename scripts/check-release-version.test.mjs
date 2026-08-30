@@ -30,9 +30,11 @@ const packageManifests = [
 ]
 
 describe('checkReleaseVersions', () => {
-  it('accepts coordinated public package and tag versions', () => {
+  it('accepts coordinated public package and tag versions in publish mode', () => {
     expect(checkReleaseVersions({
       packageManifests,
+      publish: true,
+      refType: 'tag',
       rootManifest,
       tag: 'v0.2.0',
     })).toEqual({
@@ -73,6 +75,25 @@ describe('checkReleaseVersions', () => {
       'Git tag "0.2.0" does not match version "0.2.0"; expected "v0.2.0".',
     )
   })
+
+  it('rejects publish mode without a ref name', () => {
+    expect(() => checkReleaseVersions({
+      packageManifests,
+      publish: true,
+      refType: 'tag',
+      rootManifest,
+    })).toThrowError('GITHUB_REF_NAME must be set in publish mode.')
+  })
+
+  it('rejects a matching branch in publish mode', () => {
+    expect(() => checkReleaseVersions({
+      packageManifests,
+      publish: true,
+      refType: 'branch',
+      rootManifest,
+      tag: 'v0.2.0',
+    })).toThrowError('GITHUB_REF_TYPE must be "tag" in publish mode; received "branch".')
+  })
 })
 
 describe('release manifests', () => {
@@ -100,7 +121,7 @@ describe('release manifests', () => {
 
     expect(manifests.rootManifest.manifest.devDependencies.changelogen).toBeUndefined()
     expect(manifests.rootManifest.manifest.scripts.release).toBeTypeOf('string')
-    expect(manifests.rootManifest.manifest.scripts['publish:ci']).toMatch(/^pnpm release:check &&/)
+    expect(manifests.rootManifest.manifest.scripts['publish:ci']).toMatch(/^pnpm release:check --publish &&/)
     expect(manifests.rootManifest.manifest.scripts['release:check']).toBe('node scripts/check-release-version.mjs')
     for (const { manifest } of publicPackageManifests)
       expect(manifest.scripts?.release).toBeUndefined()

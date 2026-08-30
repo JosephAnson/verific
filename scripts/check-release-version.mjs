@@ -3,7 +3,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
-export function checkReleaseVersions({ rootManifest, packageManifests, tag }) {
+export function checkReleaseVersions({ rootManifest, packageManifests, publish = false, refType, tag }) {
   const problems = []
   const rootVersion = rootManifest.manifest.version
 
@@ -17,6 +17,17 @@ export function checkReleaseVersions({ rootManifest, packageManifests, tag }) {
 
   if (publicPackageManifests.length === 0)
     problems.push('No public package manifests were found under packages/*/package.json.')
+
+  if (publish) {
+    if (typeof tag !== 'string' || tag.length === 0)
+      problems.push('GITHUB_REF_NAME must be set in publish mode.')
+
+    if (refType !== 'tag') {
+      problems.push(
+        `GITHUB_REF_TYPE must be "tag" in publish mode; received ${formatValue(refType)}.`,
+      )
+    }
+  }
 
   if (typeof rootVersion === 'string' && rootVersion.length > 0) {
     for (const packageManifest of publicPackageManifests) {
@@ -88,6 +99,8 @@ async function main() {
     const manifests = await readReleaseManifests(repositoryRoot)
     const result = checkReleaseVersions({
       ...manifests,
+      publish: process.argv.includes('--publish'),
+      refType: process.env.GITHUB_REF_TYPE,
       tag: process.env.GITHUB_REF_NAME,
     })
     const tagSummary = process.env.GITHUB_REF_NAME === undefined
