@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -768,13 +768,15 @@ async function createAdapterConsumer(
   })
 
   const examples = join(root, 'playgrounds/docs/guide/localisation/examples')
-  await cp(
+  await copyDocumentationRegion(
     join(examples, 'nuxt-i18next-plugin.ts'),
     join(directory, 'test-plugins/verific-i18next.ts'),
+    'nuxt-plugin',
   )
-  await cp(
+  await copyDocumentationRegion(
     join(examples, 'nuxt-paraglide-plugin.ts'),
     join(directory, 'test-plugins/verific-paraglide.ts'),
+    'nuxt-plugin',
   )
   await cp(generatedParaglide, join(directory, 'paraglide'), { recursive: true })
   await writeFile(join(directory, 'app.vue'), adapterConsumerApp())
@@ -788,6 +790,24 @@ async function createAdapterConsumer(
   }, null, 2)}\n`)
 
   return directory
+}
+
+async function copyDocumentationRegion(source, target, region) {
+  const lines = (await readFile(source, 'utf8')).split(/\r?\n/)
+  const startMarker = `// #region ${region}`
+  const endMarker = `// #endregion ${region}`
+  const starts = lines.flatMap((line, index) => line.trim() === startMarker ? [index] : [])
+  const ends = lines.flatMap((line, index) => line.trim() === endMarker ? [index] : [])
+
+  if (starts.length !== 1 || ends.length !== 1 || ends[0] <= starts[0] + 1) {
+    throw new Error(`${source} must contain one non-empty ${region} region.`)
+  }
+
+  const body = lines.slice(starts[0] + 1, ends[0]).join('\n')
+  if (body.trim().length === 0) {
+    throw new Error(`${source} contains an empty ${region} region.`)
+  }
+  await writeFile(target, `${body}\n`)
 }
 
 function adapterConsumerConfig(adapter) {
@@ -860,9 +880,13 @@ function adapterConsumerApp() {
 }
 
 async function assertAdapterExamplesTypecheck(directory, nuxtVersion) {
-  console.warn(`\nNuxt ${nuxtVersion} strict adapter recipe types`)
-  await run(nuxiBinary(directory), ['prepare'], directory)
-  await run(nuxiBinary(directory), ['typecheck'], directory)
+  for (const adapter of ['i18next', 'paraglide']) {
+    console.warn(`\nNuxt ${nuxtVersion} ${adapter} strict adapter recipe types`)
+    await rm(join(directory, '.nuxt'), { force: true, recursive: true })
+    await writeFile(join(directory, 'nuxt.config.ts'), adapterConsumerConfig(adapter))
+    await run(nuxiBinary(directory), ['prepare'], directory)
+    await run(nuxiBinary(directory), ['typecheck'], directory)
+  }
 }
 
 async function assertAdapterRequestIsolation(directory, nuxtVersion, adapter) {
