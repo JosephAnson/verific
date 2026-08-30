@@ -440,7 +440,7 @@ describe('targeted validation', () => {
     expect(root.isValidating.value).toBe(false)
   })
 
-  it('resolves targeted messages lazily after the locale changes', async () => {
+  it('resolves targeted messages immediately after the locale changes', async () => {
     const locale = ref<'en' | 'es'>('en')
     const validator = vi.fn(() => ({ issues: [{ message: 'Raw', path: ['email'] }] }))
     const schema = createSchema<{ email: string }>('test', validator)
@@ -450,7 +450,6 @@ describe('targeted validation', () => {
 
     await mounted.value.validateAt('email')
     locale.value = 'es'
-    await nextTick()
 
     expect(mounted.value.errorsFor('email')).toEqual(['Correo no válido'])
     expect(validator).toHaveBeenCalledOnce()
@@ -820,7 +819,7 @@ describe('validation lifecycle', () => {
 })
 
 describe('form state', () => {
-  it('derives aggregate and exact dirty state reactively and becomes pristine after reversion', () => {
+  it('derives aggregate and exact dirty state on the same stack and becomes pristine after reversion', () => {
     const model = reactive({ email: '', profile: { name: '' } })
     const schema = createSchema<typeof model>('test', value => ({ value }))
     const mounted = mountValidation(() => useValidation(schema, model), false)
@@ -1155,7 +1154,7 @@ describe('form state', () => {
     expect(root.state.value.touched).toBe(false)
   })
 
-  it('tracks full and exact validation history, conservative staleness and reversion', async () => {
+  it('tracks full and exact validation history on the same stack', async () => {
     const firstSchema = createSchema<{ email: string, password: string }>('test', value => ({ value }))
     const secondSchema = createSchema<{ email: string, password: string }>('test', value => ({ value }))
     const schema = shallowRef(firstSchema)
@@ -2800,7 +2799,7 @@ describe('semantic issues and messages', () => {
     expect(mounted.value.errors.value).toEqual(['Use at least 4 characters'])
   })
 
-  it('resolves messages lazily from reactive locale state', async () => {
+  it('resolves messages lazily on the same stack from reactive locale state', async () => {
     const locale = ref<'en' | 'es'>('en')
     const validator = vi.fn(() => ({ issues: [{ message: 'Raw', path: ['email'] }] }))
     const schema = createSchema<{ email: string }>('test', validator)
@@ -2817,7 +2816,6 @@ describe('semantic issues and messages', () => {
     const snapshot = mounted.value.validation.errorFor('email')
 
     locale.value = 'es'
-    await nextTick()
 
     expect(snapshot).toBe('Invalid email')
     expect(mounted.value.retained.value).toBe('Correo no válido')
