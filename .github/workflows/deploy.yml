@@ -18,8 +18,10 @@ jobs:
         && github.event.workflow_run.head_branch == 'main' }}
     concurrency:
       group: deploy-main
-      cancel-in-progress: true
+      queue: max
+      cancel-in-progress: false
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -42,7 +44,35 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/verific:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/verific:${{ github.event.workflow_run.head_sha }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/verific:${{ github.event.workflow_run.head_sha }}
           sbom: true
+
+      - name: Promote current main digest to latest
+        env:
+          DIGEST: ${{ steps.docker_build.outputs.digest }}
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/verific
+        run: |
+          set -euo pipefail
+
+          current_sha="$(gh api \
+            --method GET \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2026-03-10' \
+            "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            --jq '.object.sha')"
+
+          if [[ "$current_sha" != "$EXPECTED_SHA" ]]; then
+            echo "::notice::Skipping latest promotion because ${EXPECTED_SHA} is no longer the main tip"
+            exit 0
+          fi
+
+          if [[ -z "$DIGEST" ]]; then
+            echo "::error::Docker build did not return a digest"
+            exit 1
+          fi
+
+          docker buildx imagetools create \
+            --tag "${IMAGE}:latest" \
+            "${IMAGE}@${DIGEST}"
