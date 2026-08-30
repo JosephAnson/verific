@@ -77,8 +77,6 @@ export interface ValidationGroup<Path = PropertyKey | readonly PropertyKey[]> {
   resetState: () => void
   validate: () => Promise<ValidationResult>
   validateAt: (path: Path) => Promise<TargetValidationResult>
-  /** @deprecated Use validateAt() instead. */
-  validateFor: (path: Path) => Promise<TargetValidationResult>
 }
 
 export interface ValidationController<Schema extends StandardSchemaV1>
@@ -183,7 +181,6 @@ function createGroup<Path>(scope: InternalValidationScope, prefix: readonly Prop
     resetState: scope.resetState,
     validate: scope.validate,
     validateAt,
-    validateFor: validateAt,
   }
 }
 

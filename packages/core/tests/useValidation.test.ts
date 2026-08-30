@@ -2420,22 +2420,6 @@ describe('form state', () => {
 })
 
 describe('targeted validation interface', () => {
-  it('keeps validateFor as the same no-touch, warning-free runtime function as validateAt', async () => {
-    const schema = createSchema<{ email: string }>('test', () => ({
-      issues: [{ message: 'Invalid', path: ['email'] }],
-    }))
-    const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-    expect(mounted.value.validateFor).toBe(mounted.value.validateAt)
-    expectTypeOf(mounted.value.validateFor).toEqualTypeOf(mounted.value.validateAt)
-
-    const result = await mounted.value.validateFor('email')
-    expect(result).toEqual({ issues: mounted.value.issuesFor('email') })
-    expect(mounted.value.stateFor('email')).toMatchObject({ touched: false, validated: true })
-    expect(warn).not.toHaveBeenCalled()
-  })
-
   it('accepts branch-only top-level union keys and rejects unknown keys', () => {
     type Account
       = | { kind: 'person', dateOfBirth: string }

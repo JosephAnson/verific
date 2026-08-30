@@ -225,13 +225,6 @@ transformed output; full `validate()` owns those submission states and is the
 only submission gate. A programmatic `validateAt()` call does not mark the path
 touched.
 
-### Deprecated `validateFor()` alias
-
-`validateFor(path)` remains available until 1.0 for compatibility. It is the
-same runtime function as `validateAt(path)`, emits no runtime warning and keeps
-the same exact-publication, failure, concurrency and no-touch behaviour. New
-code should use the preferred name.
-
 For a repeated field, include the current array index in the exact path:
 
 ```ts

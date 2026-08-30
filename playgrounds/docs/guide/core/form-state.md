@@ -81,7 +81,7 @@ async function onEmailBlur() {
 }
 ```
 
-Calling `validateAt()`, its deprecated [`validateFor()` alias](../reference/use-validation#deprecated-validatefor-alias) or `validate()` alone never marks a path touched. Controller paths are relative to their `at` prefix; orchestration-scope paths are absolute.
+Calling `validateAt()` or `validate()` alone never marks a path touched. Controller paths are relative to their `at` prefix; orchestration-scope paths are absolute.
 
 ## Current results and submission output
 
