@@ -36,7 +36,13 @@ async function onSubmit(event: Event) {
     </h1>
     <form class="space-y-4" @submit="onSubmit">
       <div class="flex-col flex">
-        <input v-model="email" type="email">
+        <label for="form1-email">Email</label>
+        <input
+          id="form1-email"
+          v-model="email"
+          class="rounded border border-gray-500 bg-white px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          type="email"
+        >
         <span
           v-for="(error, index) in errorsFor('email')"
           :key="`${index}:${error}`"
@@ -44,7 +50,13 @@ async function onSubmit(event: Event) {
         >{{ error }}</span>
       </div>
       <div class="flex-col flex">
-        <input v-model="password" type="password">
+        <label for="form1-password">Password</label>
+        <input
+          id="form1-password"
+          v-model="password"
+          class="rounded border border-gray-500 bg-white px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          type="password"
+        >
         <span
           v-for="(error, index) in errorsFor('password')"
           :key="`${index}:${error}`"

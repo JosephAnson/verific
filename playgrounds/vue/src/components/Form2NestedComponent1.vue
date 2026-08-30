@@ -18,7 +18,12 @@ const { errorsFor } = useValidation(schema, {
   <div class="container">
     <div class="flex-col flex">
       <label for="firstName">First Name</label>
-      <input id="firstName" v-model="firstName" type="text">
+      <input
+        id="firstName"
+        v-model="firstName"
+        class="rounded border border-gray-500 bg-white px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        type="text"
+      >
       <span
         v-for="(error, index) in errorsFor('firstName')"
         :key="`${index}:${error}`"
