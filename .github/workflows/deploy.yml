@@ -10,23 +10,25 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-main
-  cancel-in-progress: true
-
 jobs:
   build:
-    runs-on: ubuntu-latest
     if: >-
       ${{ github.event.workflow_run.conclusion == 'success'
         && github.event.workflow_run.event == 'push'
         && github.event.workflow_run.head_branch == 'main' }}
+    concurrency:
+      group: deploy-main
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Login to DockerHub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
