@@ -34,7 +34,21 @@ Run the same checks expected in continuous integration:
 pnpm check
 ```
 
-The integrated check covers linting, strict package and playground type checks, coverage, package and playground builds, documentation, dependency freshness and audit checks, and the packed Nuxt 3/4 localisation matrix. Use `pnpm test:watch` while developing tests. Tests live alongside their package under `packages/*/tests`.
+The integrated check covers linting, strict package and playground type checks, coverage, package and playground builds, documentation, high-severity dependency advisories, registry signatures, and the packed Nuxt 3/4 request-local localisation matrix. Use `pnpm test:watch` while developing tests. Tests live alongside their package under `packages/*/tests`.
+
+The targeted package, documentation and integration gates build their own prerequisites, so each can run from a clean checkout:
+
+```bash
+pnpm packages:compatibility
+pnpm docs:check
+pnpm test:integration
+```
+
+Dependency freshness is informational and does not affect `pnpm check` or publication. Run it separately when reviewing updates:
+
+```bash
+pnpm dependencies:outdated
+```
 
 ## Code style
 

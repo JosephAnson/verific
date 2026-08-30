@@ -33,19 +33,11 @@ async function main() {
       if (nuxtVersion === '3.21.11') {
         await assertPackedExports(localised)
       }
+      assertPackagesAbsent(localised, ['@nuxtjs/i18n'])
+      await assertRequestLocalTypes(localised)
       await assertRender(localised, {
-        label: `Nuxt ${nuxtVersion} automatic (Verific first)`,
+        label: `Nuxt ${nuxtVersion} request-local Vue I18n`,
         environment: { VERIFIC_I18N: 'true' },
-        expected: 'Enter an email address',
-      })
-      await assertRender(localised, {
-        label: `Nuxt ${nuxtVersion} automatic (Nuxt I18n first)`,
-        environment: { VERIFIC_I18N: 'true', VERIFIC_I18N_FIRST: 'true' },
-        expected: 'Enter an email address',
-      })
-      await assertRender(localised, {
-        label: `Nuxt ${nuxtVersion} manual localisation`,
-        environment: { VERIFIC_I18N: 'true', VERIFIC_MANUAL: 'true' },
         expected: 'Enter an email address',
       })
       await assertConcurrentRequestIsolation(localised, nuxtVersion)
@@ -212,7 +204,7 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
     errorMessages.$slots.default?.({ message: 'Required', index: '0' })
     // @ts-expect-error The default slot requires the complete payload.
     errorMessages.$slots.default?.({ message: 'Required' })
-  `, { skipLibCheck: false })
+  `)
 }
 
 async function assertSharedI18nConsumer(temporaryRoot, tarballs) {
@@ -258,7 +250,7 @@ async function assertSharedI18nConsumer(temporaryRoot, tarballs) {
 async function assertVueI18nConsumer(temporaryRoot, tarballs) {
   const directory = await createPackageConsumer(temporaryRoot, 'vue-i18n-adapter', [
     'vue@3.5.42',
-    'vue-i18n@11.4.10',
+    'vue-i18n@11.1.12',
     tarballs['packages/core'],
     tarballs['packages/i18n'],
     tarballs['packages/vue-i18n'],
@@ -383,7 +375,7 @@ async function assertPackedDocumentationExamples(temporaryRoot, tarballs, genera
     'i18next-vue@5.4.0',
     'typescript@5.9.3',
     'vue@3.5.42',
-    'vue-i18n@11.4.10',
+    'vue-i18n@11.1.12',
     tarballs['packages/core'],
     tarballs['packages/i18n'],
     tarballs['packages/i18next'],
@@ -394,26 +386,26 @@ async function assertPackedDocumentationExamples(temporaryRoot, tarballs, genera
   await cp(join(root, 'playgrounds/docs/guide/localisation/examples'), examples, { recursive: true })
   await rm(join(examples, 'paraglide'), { force: true, recursive: true })
   await cp(generatedParaglide, join(examples, 'paraglide'), { recursive: true })
-  await writeFile(join(examples, 'tsconfig.json'), `${JSON.stringify({
-    compilerOptions: {
-      allowJs: false,
-      module: 'ESNext',
-      moduleResolution: 'Bundler',
-      noEmit: true,
-      skipLibCheck: true,
-      strict: true,
-      target: 'ES2022',
-    },
-    include: [
-      './i18next-form.ts',
-      './i18next-setup.ts',
-      './paraglide-form.ts',
-      './paraglide-setup.ts',
-      './paraglide/**/*.d.ts',
-      './vue-i18n-setup.ts',
-    ],
-  }, null, 2)}\n`)
-  await run(join(root, 'node_modules/.bin/tsc'), ['--noEmit', '-p', join(examples, 'tsconfig.json')], directory)
+  const compilerOptions = {
+    allowJs: false,
+    module: 'ESNext',
+    moduleResolution: 'Bundler',
+    noEmit: true,
+    skipLibCheck: false,
+    strict: true,
+    target: 'ES2022',
+  }
+  const suites = [
+    { name: 'i18next', include: ['./i18next-form.ts', './i18next-setup.ts'] },
+    { name: 'paraglide', include: ['./paraglide-form.ts', './paraglide-setup.ts', './paraglide/**/*.d.ts'] },
+    { name: 'vue-i18n', include: ['./vue-i18n-setup.ts'] },
+  ]
+
+  for (const { name, include } of suites) {
+    const config = join(examples, `tsconfig.${name}.json`)
+    await writeFile(config, `${JSON.stringify({ compilerOptions, include }, null, 2)}\n`)
+    await run(join(root, 'node_modules/.bin/tsc'), ['--noEmit', '-p', config], directory)
+  }
 }
 
 async function createPackageConsumer(temporaryRoot, name, dependencies) {
@@ -455,14 +447,14 @@ async function assertModuleFormats(directory, sources) {
   await run(process.execPath, ['entry.cjs'], directory)
 }
 
-async function assertTypes(directory, source, { skipLibCheck = true } = {}) {
+async function assertTypes(directory, source) {
   await writeFile(join(directory, 'entry.ts'), source)
   await writeFile(join(directory, 'tsconfig.json'), `${JSON.stringify({
     compilerOptions: {
       module: 'ESNext',
       moduleResolution: 'Bundler',
       noEmit: true,
-      skipLibCheck,
+      skipLibCheck: false,
       strict: true,
       target: 'ES2022',
     },
@@ -575,8 +567,7 @@ async function createConsumer(temporaryRoot, name, nuxtVersion, tarballs, locali
   ]
   if (localisation) {
     dependencies.push(
-      '@nuxtjs/i18n@10.6.0',
-      'vue-i18n@11.4.10',
+      'vue-i18n@11.1.12',
       tarballs['packages/i18n'],
       tarballs['packages/vue-i18n'],
     )
@@ -593,6 +584,20 @@ async function createConsumer(temporaryRoot, name, nuxtVersion, tarballs, locali
     npm_config_cache: process.env.VERIFIC_NPM_CACHE ?? join(temporaryRoot, '.npm-cache'),
   })
   return directory
+}
+
+async function assertRequestLocalTypes(directory) {
+  await assertTypes(directory, `
+    import { createVerific } from '@verific/core'
+    import { vueI18nMessages } from '@verific/vue-i18n'
+    import { createSSRApp, h } from 'vue'
+    import { createI18n } from 'vue-i18n'
+
+    const i18n = createI18n({ legacy: false, locale: 'en', messages: {} })
+    const app = createSSRApp({ render: () => h('main') })
+    app.use(i18n)
+    app.use(createVerific({ messages: vueI18nMessages(i18n.global) }))
+  `)
 }
 
 function assertLocalePackagesAbsent(directory) {

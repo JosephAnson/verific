@@ -1,12 +1,8 @@
 <script setup lang="ts">
 if (import.meta.server) {
   const requestedLocale = useRequestHeaders(['x-verific-locale'])['x-verific-locale']
-  const nuxtApp = useNuxtApp()
-  if ((requestedLocale === 'en' || requestedLocale === 'nl') && '$i18n' in nuxtApp) {
-    const composer = nuxtApp.$i18n as { locale: { value: string } }
-    composer.locale.value = requestedLocale
-
-    const requestBarrier = Reflect.get(nuxtApp, '$requestBarrier')
+  if (requestedLocale === 'en' || requestedLocale === 'nl') {
+    const requestBarrier = Reflect.get(useNuxtApp(), '$requestBarrier')
     if (typeof requestBarrier === 'function') {
       await requestBarrier(requestedLocale)
       console.warn(`[Verific test barrier] continued ${requestedLocale}`)
