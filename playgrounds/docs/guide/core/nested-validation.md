@@ -76,7 +76,6 @@ async function submit() {
 <template>
   <form
     novalidate
-    data-validation-required-descendants
     aria-describedby="contact-required-instructions"
     @submit.prevent="submit"
   >

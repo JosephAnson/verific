@@ -1592,7 +1592,6 @@ async function expandElement(unit, element, frame, state, auditor) {
   }
 
   const occurrence = {
-    componentTrail: frame.componentTrail,
     form: frame.form,
     mount: frame.mount,
     node: element,
@@ -1610,8 +1609,6 @@ async function expandElement(unit, element, frame, state, auditor) {
         ...frame,
         parent: occurrence,
       }, state, auditor)
-      if (frame.form)
-        state.unresolvedComponents.push({ form: frame.form, occurrence })
       return
     }
     if (frame.stack.includes(childUnit.key)) {
@@ -1623,7 +1620,6 @@ async function expandElement(unit, element, frame, state, auditor) {
     const childMount = mountCopy(frame.mount)
     childMount.bindings.clear()
     await expandChildren(childUnit, childUnit.ast.children, {
-      componentTrail: [...frame.componentTrail, childUnit.key],
       form: frame.form,
       mount: childMount,
       parent: occurrence,
@@ -1661,13 +1657,11 @@ async function expandedDocument(entries, auditor) {
     markerElements: [],
     nextMountId: 1,
     reachedUnits: new Set(),
-    unresolvedComponents: [],
   }
 
   for (const unit of entries) {
     state.reachedUnits.add(unit.key)
     await expandChildren(unit, unit.ast.children, {
-      componentTrail: [unit.key],
       form: undefined,
       mount: {
         bindings: new Map(),
@@ -1899,7 +1893,6 @@ function auditMarkerContracts(elements, failures) {
     ['data-validation-skip', isFormControl, 'a non-hidden input, select or textarea'],
     ['data-validation-optional', isFormControl, 'a non-hidden input, select or textarea'],
     ['data-validation-required-group', occurrence => occurrence.node.tag === 'fieldset', '<fieldset>'],
-    ['data-validation-required-descendants', occurrence => occurrence.node.tag === 'form', '<form>'],
   ]
 
   for (const element of elements) {
@@ -1935,7 +1928,6 @@ function auditForm(form, state, targets, failures) {
     failures.push(`${formName} novalidate must be declared exactly once`)
   else if (['false', 'unknown'].includes(novalidate))
     failures.push(`${formName} novalidate must be static or a literal true binding`)
-  markerFailure(form, 'data-validation-required-descendants', failures)
   if (hasProperty(form.node, 'data-validation-optional-only'))
     failures.push(`${formName} must classify optional controls individually`)
   if (hasProperty(form.node, 'data-validation-optional'))
@@ -2023,8 +2015,6 @@ function auditForm(form, state, targets, failures) {
   }
 
   for (const element of state.elements.filter(element => element.form === form)) {
-    if (element !== form && hasProperty(element.node, 'data-validation-required-descendants'))
-      failures.push(`${formName} required-descendants marker belongs on the form, not <${element.node.tag}>`)
     if (hasProperty(element.node, 'data-validation-optional') && !isFormControl(element))
       failures.push(`${formName} optional marker on <${element.node.tag}> is only valid on a non-hidden input, select or textarea`)
   }
@@ -2065,16 +2055,6 @@ function auditForm(form, state, targets, failures) {
     else if (classifications > 1)
       failures.push(`${formName} control ${controlName} has conflicting requiredness classifications`)
   }
-
-  const descendantControls = validationControls.filter(control => control.componentTrail.length > form.componentTrail.length)
-  const descendantRequired = descendantControls.some(hasRequiredSemantics)
-    || [...groupControls].some(control => descendantControls.includes(control))
-  const descendantMarker = markerState(form.node, 'data-validation-required-descendants')
-  const unresolved = state.unresolvedComponents.some(component => component.form === form)
-  if (descendantRequired && descendantMarker === 'absent')
-    failures.push(`${formName} has required controls in imported descendants but is missing data-validation-required-descendants`)
-  if (descendantMarker === 'valid' && (!descendantRequired || unresolved))
-    failures.push(`${formName} required-descendants marker is not backed by resolved required child controls`)
 
   const requiredCount = controls.filter(hasRequiredSemantics).length + validRequiredGroups
   let requiredInstructions = []
@@ -2692,7 +2672,7 @@ import RequiredPhoneField from './RequiredPhoneField.vue'
 </script>
 
 <template>
-  <form novalidate data-validation-required-descendants aria-describedby="descendant-required-instructions">
+  <form novalidate aria-describedby="descendant-required-instructions">
     <p id="descendant-required-instructions">Name and phone are required.</p>
     <Logo />
     <RequiredNameField />
@@ -3252,7 +3232,7 @@ const errorsFor = () => []
       { name: 'conditionally mounted explicit label', path: indexPath, mutated: originalIndex.replace('<label for="email">Email</label>', '<label v-if="showEmailLabel" for="email">Email</label>'), expected: 'control "email" is missing an accessible name' },
       { name: 'optional explicit label for IDREF', path: indexPath, mutated: originalIndex.replace('<label for="email">Email</label>', '<label :for="showEmailLabel ? \'email\' : undefined">Email</label>'), expected: '<label> can omit for at runtime' },
       { name: 'label for accepts exactly one id', path: indexPath, mutated: originalIndex.replace('<label for="email">Email</label>', '<label for="email password">Email</label>'), expected: '<label> for must contain exactly one id' },
-      { name: 'Logo cannot prove required descendants', path: descendantPath, mutated: originalDescendant.replace('    <RequiredNameField />\n    <RequiredPhoneField />', '    <Logo />\n    <Logo />'), expected: 'required-descendants marker is not backed by resolved required child controls' },
+      { name: 'imported descendants must back required instructions', path: descendantPath, mutated: originalDescendant.replace('    <RequiredNameField />\n    <RequiredPhoneField />', '    <Logo />\n    <Logo />'), expected: 'describes required fields but no control exposes required semantics' },
       { name: 'component loop bindings stay lexical', path: descendantPath, mutated: originalDescendant.replace('import Logo from \'./Logo.vue\'', 'import Logo from \'./Logo.vue\'\nimport LoopChild from \'./LoopChild.vue\'').replace('    <RequiredNameField />', '    <LoopChild v-for="(_, index) in rows" :key="index" />'), expected: 'id "loop-child-value" is repeated by v-for and must depend on every loop binding' },
       { name: 'component attributes supplied through object v-bind', path: descendantPath, mutated: originalDescendant.replace('    <Logo />', '    <Logo v-bind="logoAttrs" />'), expected: 'validation-critical attributes cannot be supplied through argumentless v-bind on <Logo>' },
       { name: 'required removed from imported name field', path: namePath, mutated: originalName.replace(' id="descendant-name" required ', ' id="descendant-name" '), expected: 'control "descendant-name" must be classified as required, optional or a declared required-group member' },

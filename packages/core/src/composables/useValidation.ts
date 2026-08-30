@@ -21,8 +21,10 @@ export type ValidationData<Schema extends StandardSchemaV1>
   = | MaybeRef<ValidationInput<Schema>>
     | ValidationFields<Schema>
 
+type ObjectTopLevelKey<Input> = Input extends object ? keyof Input : never
+
 type ValidationTopLevelKey<Input>
-  = Input extends object ? keyof Input : PropertyKey
+  = [Extract<Input, object>] extends [never] ? PropertyKey : ObjectTopLevelKey<Input>
 
 export type ValidationPath<Schema extends StandardSchemaV1 = StandardSchemaV1>
   = | ValidationTopLevelKey<StandardSchemaV1.InferInput<Schema>>
@@ -295,6 +297,7 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
       track()
       return readAggregateState()
     },
+    /* v8 ignore next -- customRef requires a setter; the public state ref is readonly. */
     set() {},
   }))) as ComputedRef<ValidationState>
 
@@ -408,7 +411,7 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
   function stateFor(path: readonly PropertyKey[]): ValidationState {
     void stateRevision.value
     if (resetCapture?.phase === 'capture') {
-      return readPathState(path, resetCapture.observedSnapshots)
+      return readCapturedPathState(path, resetCapture.observedSnapshots)
     }
     const matching = [...registrations.entries()]
       .filter(([, registration]) => pathStartsWith(path, registration.at))
@@ -436,7 +439,7 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
     return createState(dirty, touched, validated, stale, validating)
   }
 
-  function readPathState(
+  function readCapturedPathState(
     path: readonly PropertyKey[],
     observedSnapshots: readonly ValidationSnapshot[],
   ): ValidationState {
@@ -588,7 +591,7 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
       if (latestFull === authority) {
         latestFull = previousLatestFull
       }
-      rollbackWorkStart(authority)
+      finishWork(authority)
       if (authority.abortReason) {
         unsettledWork.delete(authority)
         deferred.reject(authority.abortReason)
@@ -640,7 +643,7 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
     }
     catch (reason) {
       removeActiveTarget(authority)
-      rollbackWorkStart(authority)
+      finishWork(authority)
       if (authority.abortReason) {
         unsettledWork.delete(authority)
         releaseLatestTarget(authority.path)
@@ -875,11 +878,6 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
     pendingWork.add(authority)
     unsettledWork.add(authority)
     publishValidatingAndInvalidate(true, true)
-  }
-
-  function rollbackWorkStart(authority: ValidationWork): void {
-    pendingWork.delete(authority)
-    publishValidatingAndInvalidate(pendingWork.size > 0, false)
   }
 
   function finishWork(authority: ValidationWork): void {
@@ -1187,8 +1185,12 @@ function createValidationScope(options: ValidationScopeOptions, application?: Ve
 function createGroup<Path>(scope: InternalValidationScope, prefix: readonly PropertyKey[]): ValidationGroup<Path> {
   const issues = computed(() => collectIssues(scope.committed.value))
 
+  function resolvePath(path: Path): PropertyKey[] {
+    return [...prefix, ...selectorSegments(path)]
+  }
+
   function issuesFor(path: Path): readonly ValidationIssue[] {
-    const resolved = [...prefix, ...selectorSegments(path)]
+    const resolved = resolvePath(path)
     return issues.value.filter(issue => pathsEqual(issue.path, resolved))
   }
 
@@ -1196,8 +1198,9 @@ function createGroup<Path>(scope: InternalValidationScope, prefix: readonly Prop
     return issuesFor(path).map(resolveMessage)
   }
 
-  const resolvePath = (path: Path) => [...prefix, ...selectorSegments(path)]
-  const validateAt = (path: Path) => scope.validateAt(resolvePath(path))
+  function validateAt(path: Path): Promise<TargetValidationResult> {
+    return scope.validateAt(resolvePath(path))
+  }
 
   return {
     issues,

@@ -2127,7 +2127,16 @@ describe('form state', () => {
         return 'ready'
       },
     }
-    const schema = createSchema<{ email: string, code: string }>('test', value => ({ value }))
+    let pendingTarget = false
+    let resolvePending!: (result: StandardSchemaV1.Result<{ email: string, code: string }>) => void
+    const schema = createSchema<{ email: string, code: string }>('test', (value) => {
+      if (!pendingTarget) {
+        return { value }
+      }
+      return new Promise((resolve) => {
+        resolvePending = resolve
+      })
+    })
     let validation!: ReturnType<typeof useValidation<typeof schema>>
     const duringCapture: ValidationState[] = []
     let evaluations = 0
@@ -2148,15 +2157,34 @@ describe('form state', () => {
       return validation
     }, false)
 
-    await mounted.value.validate()
+    await mounted.value.validateAt('email')
+    mounted.value.touch('email')
     email.value = 'changed@example.com'
     expect(mounted.value.stateFor('email')).toMatchObject({ dirty: true, validated: true, stale: true })
+
+    pendingTarget = true
+    const target = mounted.value.validateAt('email')
 
     mutateDuringReset = true
     throwDuringReset = true
     expect(() => mounted.value.resetState()).toThrow(captureFailure)
-    expect(duringCapture).toContainEqual(expect.objectContaining({ dirty: true, validated: true, stale: true }))
-    expect(mounted.value.stateFor('email')).toMatchObject({ dirty: true, validated: true, stale: true })
+    expect(duringCapture).toContainEqual(expect.objectContaining({
+      dirty: true,
+      touched: true,
+      validated: true,
+      stale: true,
+      validating: true,
+    }))
+    expect(mounted.value.stateFor('email')).toMatchObject({
+      dirty: true,
+      touched: true,
+      validated: true,
+      stale: true,
+      validating: true,
+    })
+
+    resolvePending({ value: { email: 'changed@example.com', code: 'ready' } })
+    await target
 
     const evaluationsAfterFailure = evaluations
     email.value = 'after@example.com'
@@ -2417,11 +2445,53 @@ describe('targeted validation interface', () => {
       void mounted.value.stateFor('missing')
     }
   })
+
+  it('keeps optional and nullable object paths narrow', () => {
+    type OptionalAccount = { email: string } | undefined
+    type NullableAccount = { email: string } | null
+    const optionalSchema = createSchema<OptionalAccount>('test', value => ({ value }))
+    const nullableSchema = createSchema<NullableAccount>('test', value => ({ value }))
+    const optionalModel = ref<OptionalAccount>({ email: '' })
+    const nullableModel = ref<NullableAccount>({ email: '' })
+    const mounted = mountValidation(() => ({
+      optional: useValidation(optionalSchema, optionalModel),
+      nullable: useValidation(nullableSchema, nullableModel),
+    }), false)
+
+    expectTypeOf(mounted.value.optional.validateAt).parameter(0).toEqualTypeOf<
+      'email' | readonly PropertyKey[]
+    >()
+    expectTypeOf(mounted.value.nullable.validateAt).parameter(0).toEqualTypeOf<
+      'email' | readonly PropertyKey[]
+    >()
+    mounted.value.optional.touch('email')
+    void mounted.value.nullable.stateFor('email')
+    if (false) {
+      // @ts-expect-error Optional object controllers reject unknown top-level keys.
+      void mounted.value.optional.validateAt('missing')
+      // @ts-expect-error Optional object controllers reject unknown top-level keys.
+      mounted.value.optional.touch('missing')
+      // @ts-expect-error Nullable object controllers reject unknown top-level keys.
+      void mounted.value.nullable.stateFor('missing')
+      // @ts-expect-error Nullable object controllers reject unknown top-level keys.
+      void mounted.value.nullable.issuesFor('missing')
+    }
+  })
+
+  it('keeps the property-key fallback for scalar schemas', () => {
+    const schema = createSchema<string>('test', value => ({ value }))
+    const model = ref('')
+    const mounted = mountValidation(() => useValidation(schema, model), false)
+
+    expectTypeOf(mounted.value.validateAt).parameter(0).toEqualTypeOf<
+      PropertyKey | readonly PropertyKey[]
+    >()
+  })
 })
 
 describe('semantic issues and messages', () => {
-  it('normalises guaranteed Zod 4.5.1 semantics from real issues', async () => {
-    expect(zodVersion).toBe('4.5.1')
+  it('normalises guaranteed Zod 4.5.4 semantics from real issues', async () => {
+    expect(zodVersion).toBe('4.5.4')
     const z = await loadZod()
     const schema = z.object({
       required: z.string(),

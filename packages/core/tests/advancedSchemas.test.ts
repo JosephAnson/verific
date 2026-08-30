@@ -31,7 +31,7 @@ const describePasswordMismatch: IssueNormaliser = ({ raw }) => {
 
 describe('advanced Standard Schema vendor behaviour', () => {
   it('preserves a Zod custom issue and its explicit cross-field path', async () => {
-    expect(zodVersion).toBe('4.5.1')
+    expect(zodVersion).toBe('4.5.4')
     const z = await loadZod()
     const schema = z.object({
       password: z.string(),

@@ -42,7 +42,6 @@ async function onSubmit() {
   <div class="verific-example">
     <form
       novalidate
-      data-validation-required-descendants
       aria-describedby="nested-required-instructions"
       @submit.prevent="onSubmit"
     >
