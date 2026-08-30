@@ -1,6 +1,6 @@
 ## 1. Deep core validation modules
 
-- [ ] T01 Extract shared path operations, the Issue-to-Error pipeline, Registration observation and Scope lifecycle into deep internal modules, then leave `useValidation` as the thin Vue/prefix adapter.
+- [x] T01 Extract shared path operations, the Issue-to-Error pipeline, Registration observation and Scope lifecycle into deep internal modules, then leave `useValidation` as the thin Vue/prefix adapter.
   - Depends on: none
   - Writes: packages/core/src/composables/useValidation.ts, packages/core/src/validation/paths.ts, packages/core/src/validation/issuePipeline.ts, packages/core/src/validation/registrationObservation.ts, packages/core/src/validation/scope.ts, packages/core/tests/issuePipeline.test.ts, packages/core/tests/useValidation.test.ts
   - Locks: core-validation-internals
@@ -11,7 +11,7 @@
 
 ## 2. Deep rendered-validation audit
 
-- [ ] T02 Extract rendered Vue expansion and form-contract checking behind one deep audit seam while leaving discovery, reporting and the mutation harness in the outer documentation checker.
+- [x] T02 Extract rendered Vue expansion and form-contract checking behind one deep audit seam while leaving discovery, reporting and the mutation harness in the outer documentation checker.
   - Depends on: none
   - Writes: playgrounds/docs/scripts/check-docs.mjs, playgrounds/docs/scripts/rendered-validation-audit.mjs
   - Locks: docs-rendered-audit
@@ -22,7 +22,7 @@
 
 ## 3. Locale adapter conformance
 
-- [ ] T03 Add a shared test-only Locale adapter conformance module and package-local drivers, pruning only duplicated observable-contract cases from vendor suites.
+- [x] T03 Add a shared test-only Locale adapter conformance module and package-local drivers, pruning only duplicated observable-contract cases from vendor suites.
   - Depends on: none
   - Writes: tests/support/localeAdapterConformance.ts, packages/i18n/tests/localeAdapterConformance.test.ts, packages/i18n/tests/createCatalogueMessages.test.ts, packages/i18n/tsconfig.json, packages/i18next/tests/localeAdapterConformance.test.ts, packages/i18next/tests/i18nextMessages.test.ts, packages/i18next/tsconfig.json, packages/vue-i18n/tests/localeAdapterConformance.test.ts, packages/vue-i18n/tests/vueI18nMessages.test.ts, packages/vue-i18n/tsconfig.json, packages/paraglide/tests/localeAdapterConformance.test.ts, packages/paraglide/tests/paraglideMessages.test.ts, packages/paraglide/tsconfig.json
   - Locks: locale-adapter-conformance
@@ -33,7 +33,7 @@
 
 ## 4. Integrated architecture gate
 
-- [ ] T04 Integrate the accepted deep modules, resolve only cross-scope regressions and run the complete repository and strict OpenSpec gates.
+- [x] T04 Integrate the accepted deep modules, resolve only cross-scope regressions and run the complete repository and strict OpenSpec gates.
   - Depends on: T01, T02, T03
   - Writes: packages/core/src/**, packages/core/tests/**, playgrounds/docs/scripts/**, tests/support/**, packages/i18n/tests/**, packages/i18n/tsconfig.json, packages/i18next/tests/**, packages/i18next/tsconfig.json, packages/vue-i18n/tests/**, packages/vue-i18n/tsconfig.json, packages/paraglide/tests/**, packages/paraglide/tsconfig.json, packages/nuxt/tsconfig.json
   - Locks: core-validation-internals, docs-rendered-audit, locale-adapter-conformance
