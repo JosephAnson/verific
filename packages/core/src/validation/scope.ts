@@ -5,13 +5,7 @@ import type { IssuePipeline, ValidationPolicyOptions } from './issuePipeline'
 import type { ObservableRegistration, ObservedValidationState, ValidationSnapshot } from './registrationObservation'
 import { computed, shallowRef } from 'vue'
 import { validateWithStandardSchema } from '../utils/schemaUtils'
-import {
-  collectIssues,
-  createIssuePipeline,
-  issuesFromResult,
-  replaceIssuesAtPath,
-  resolveValidationMessage,
-} from './issuePipeline'
+import { createIssuePipeline, resolveValidationMessage } from './issuePipeline'
 import { pathsEqual } from './paths'
 import { createRegistrationObservation } from './registrationObservation'
 
@@ -121,6 +115,31 @@ interface TargetValidationAuthority extends ValidationWork {
 }
 
 const IDLE_RESULT = Object.freeze({ status: 'idle' as const })
+
+function collectIssues(issues: ReadonlyMap<symbol, readonly ValidationIssue[]>): readonly ValidationIssue[] {
+  return [...issues.values()].flatMap(registrationIssues => registrationIssues)
+}
+
+function issuesFromResult(result: ScopeRegistrationResult<unknown>): readonly ValidationIssue[] {
+  return result.status === 'invalid' ? result.issues : []
+}
+
+function replaceIssuesAtPath(
+  previous: readonly ValidationIssue[],
+  path: readonly PropertyKey[],
+  replacements: readonly ValidationIssue[],
+): readonly ValidationIssue[] {
+  const firstMatch = previous.findIndex(issue => pathsEqual(issue.path, path))
+  const retained = previous.filter(issue => !pathsEqual(issue.path, path))
+  if (firstMatch < 0) {
+    return [...retained, ...replacements]
+  }
+  return [
+    ...retained.slice(0, firstMatch),
+    ...replacements,
+    ...retained.slice(firstMatch),
+  ]
+}
 
 export function createValidationScope(
   options: ValidationPolicyOptions,

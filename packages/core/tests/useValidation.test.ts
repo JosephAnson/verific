@@ -248,22 +248,37 @@ describe('targeted validation', () => {
   })
 
   it('replaces one path in place, clears stale issues and preserves unrelated issue identity', async () => {
+    const name = ref('')
     const email = ref('')
     const password = ref('')
-    const schema = createSchema<{ email: string, password: string }>('test', value => ({
+    const schema = createSchema<{ name: string, email: string, password: string }>('test', value => ({
       issues: [
-        ...(value.email ? [] : [{ message: 'Email required', path: ['email'] }]),
+        { message: 'Name required', path: ['name'] },
+        ...(value.email === 'valid@example.com'
+          ? []
+          : [{ message: value.email ? 'Email invalid' : 'Email required', path: ['email'] }]),
         ...(value.password ? [] : [{ message: 'Password required', path: ['password'] }]),
       ],
     }))
-    const mounted = mountValidation(() => useValidation(schema, { email, password }), false)
+    const mounted = mountValidation(() => useValidation(schema, { name, email, password }), false)
     await mounted.value.validate()
+    const retainedNameIssue = mounted.value.issuesFor('name')[0]
     const retainedPasswordIssue = mounted.value.issuesFor('password')[0]
+
+    email.value = 'invalid@example.com'
+    await expect(mounted.value.validateAt('email')).resolves.toMatchObject({
+      issues: [{ message: 'Email invalid' }],
+    })
+
+    expect(mounted.value.errors.value).toEqual(['Name required', 'Email invalid', 'Password required'])
+    expect(mounted.value.issuesFor('name')[0]).toBe(retainedNameIssue)
+    expect(mounted.value.issuesFor('password')[0]).toBe(retainedPasswordIssue)
 
     email.value = 'valid@example.com'
     await expect(mounted.value.validateAt('email')).resolves.toEqual({ issues: [] })
 
-    expect(mounted.value.errors.value).toEqual(['Password required'])
+    expect(mounted.value.errors.value).toEqual(['Name required', 'Password required'])
+    expect(mounted.value.issuesFor('name')[0]).toBe(retainedNameIssue)
     expect(mounted.value.issuesFor('password')[0]).toBe(retainedPasswordIssue)
     expect(mounted.value.result.value).toMatchObject({ status: 'invalid' })
   })

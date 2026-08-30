@@ -3,7 +3,6 @@ import type { IssueNormaliser } from '../src/messages'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createIssuePipeline,
-  replaceIssuesAtPath,
   resolveValidationMessage,
 } from '../src/validation/issuePipeline'
 
@@ -75,23 +74,5 @@ describe('issue-to-Error pipeline', () => {
 
     expect(custom).toHaveBeenCalledOnce()
     expect(issue.semantic).toEqual({ identifier: 'required', values: {} })
-  })
-
-  it('replaces exact-path issues in place while retaining unrelated identity', () => {
-    const pipeline = createIssuePipeline([], {
-      registration: {},
-      root: {},
-      creatingScope: false,
-    })
-    const name = pipeline.createIssue({ message: 'Name', path: ['name'] }, 'test', {})
-    const oldEmail = pipeline.createIssue({ message: 'Old email', path: ['email'] }, 'test', {})
-    const code = pipeline.createIssue({ message: 'Code', path: ['code'] }, 'test', {})
-    const newEmail = pipeline.createIssue({ message: 'New email', path: ['email'] }, 'test', {})
-
-    const issues = replaceIssuesAtPath([name, oldEmail, code], ['email'], [newEmail])
-
-    expect(issues).toEqual([name, newEmail, code])
-    expect(issues[0]).toBe(name)
-    expect(issues[2]).toBe(code)
   })
 })

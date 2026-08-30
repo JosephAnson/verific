@@ -8,7 +8,7 @@ import type {
 } from '../messages'
 import { describeBuiltInIssue } from '../issueNormalisers'
 import { resolveIssueMessage } from '../messages'
-import { normalisePath, pathsEqual, resolveInput } from './paths'
+import { normalisePath, resolveInput } from './paths'
 
 export interface ValidationPolicyOptions {
   readonly messages?: MessageResolver
@@ -87,35 +87,6 @@ export function createIssuePipeline(
 
 export function resolveValidationMessage(issue: ValidationIssue): string {
   return resolveIssueMessage(issue, issuePolicies.get(issue) ?? { resolvers: [] })
-}
-
-export function collectIssues(issues: ReadonlyMap<symbol, readonly ValidationIssue[]>): readonly ValidationIssue[] {
-  return [...issues.values()].flatMap(registrationIssues => registrationIssues)
-}
-
-export function issuesFromResult(
-  result:
-    | { readonly status: 'invalid', readonly issues: readonly ValidationIssue[] }
-    | { readonly status: 'idle' | 'valid' },
-): readonly ValidationIssue[] {
-  return result.status === 'invalid' ? result.issues : []
-}
-
-export function replaceIssuesAtPath(
-  previous: readonly ValidationIssue[],
-  path: readonly PropertyKey[],
-  replacements: readonly ValidationIssue[],
-): readonly ValidationIssue[] {
-  const firstMatch = previous.findIndex(issue => pathsEqual(issue.path, path))
-  const retained = previous.filter(issue => !pathsEqual(issue.path, path))
-  if (firstMatch < 0) {
-    return [...retained, ...replacements]
-  }
-  return [
-    ...retained.slice(0, firstMatch),
-    ...replacements,
-    ...retained.slice(firstMatch),
-  ]
 }
 
 function uniqueValues<Value>(values: readonly (Value | undefined)[]): Value[] {
