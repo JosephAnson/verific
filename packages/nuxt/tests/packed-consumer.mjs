@@ -738,6 +738,8 @@ async function createAdapterConsumer(
   const name = `nuxt-${nuxtVersion}-adapter-recipes`
   const directory = join(temporaryRoot, name)
   await cp(fixture, directory, { recursive: true })
+  await rm(join(directory, 'i18n'), { force: true, recursive: true })
+  await rm(join(directory, 'test-plugins/verific-i18n.ts'), { force: true })
   await writeFile(join(directory, 'package.json'), `${JSON.stringify({
     name,
     private: true,
@@ -776,7 +778,7 @@ async function createAdapterConsumer(
   )
   await cp(generatedParaglide, join(directory, 'paraglide'), { recursive: true })
   await writeFile(join(directory, 'app.vue'), adapterConsumerApp())
-  await writeFile(join(directory, 'nuxt.config.ts'), adapterConsumerConfig())
+  await writeFile(join(directory, 'nuxt.config.ts'), adapterConsumerConfig('i18next'))
   await writeFile(join(directory, 'tsconfig.json'), `${JSON.stringify({
     extends: './.nuxt/tsconfig.json',
     compilerOptions: {
@@ -788,20 +790,13 @@ async function createAdapterConsumer(
   return directory
 }
 
-function adapterConsumerConfig() {
+function adapterConsumerConfig(adapter) {
   return `
-    import process from 'node:process'
-
-    const adapter = process.env.VERIFIC_ADAPTER
-    if (adapter !== 'i18next' && adapter !== 'paraglide') {
-      throw new Error('VERIFIC_ADAPTER must select i18next or paraglide.')
-    }
-
     export default defineNuxtConfig({
       compatibilityDate: '2024-04-03',
       modules: [['@verific/nuxt', { global: false }]],
       plugins: [
-        '~/test-plugins/verific-' + adapter,
+        ${JSON.stringify(`~/test-plugins/verific-${adapter}`)},
         '~/test-plugins/request-barrier.server',
       ],
     })
@@ -826,9 +821,10 @@ function adapterConsumerApp() {
       '~standard': {
         version: 1,
         vendor: 'zod',
-        validate(value: { email: string, diagnostic: string }) {
-          return value.email
-            ? { value }
+        validate(value: unknown) {
+          const input = value as typeof model
+          return input.email
+            ? { value: input }
             : {
                 issues: [
                   {
@@ -865,9 +861,8 @@ function adapterConsumerApp() {
 
 async function assertAdapterExamplesTypecheck(directory, nuxtVersion) {
   console.warn(`\nNuxt ${nuxtVersion} strict adapter recipe types`)
-  const environment = { ...process.env, VERIFIC_ADAPTER: 'i18next' }
-  await run(nuxiBinary(directory), ['prepare'], directory, environment)
-  await run(nuxiBinary(directory), ['typecheck'], directory, environment)
+  await run(nuxiBinary(directory), ['prepare'], directory)
+  await run(nuxiBinary(directory), ['typecheck'], directory)
 }
 
 async function assertAdapterRequestIsolation(directory, nuxtVersion, adapter) {
@@ -875,13 +870,13 @@ async function assertAdapterRequestIsolation(directory, nuxtVersion, adapter) {
   console.warn(`\n${label}`)
   await rm(join(directory, '.nuxt'), { force: true, recursive: true })
   await rm(join(directory, '.output'), { force: true, recursive: true })
-  const environment = { ...process.env, VERIFIC_ADAPTER: adapter }
-  await run(nuxtBinary(directory), ['build'], directory, environment)
+  await writeFile(join(directory, 'nuxt.config.ts'), adapterConsumerConfig(adapter))
+  await run(nuxtBinary(directory), ['build'], directory)
 
   const locales = ['en', 'es', 'en', 'es']
   const { result: pages, output } = await useAvailableServer(
     directory,
-    environment,
+    process.env,
     (url, server, readOutput) => Promise.all(locales.map(locale => request(
       url,
       server,
