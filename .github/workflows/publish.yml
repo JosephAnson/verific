@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install pnpm
-        uses: pnpm/setup@v1
+        uses: pnpm/setup@v2
         with:
           install: false
 
