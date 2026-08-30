@@ -232,34 +232,10 @@ Create the i18next instance and adapter inside the Nuxt plugin execution. On
 the server this is request-owned; on the client it is application-owned. The
 same instance is supplied to i18next-vue and Verific.
 
-```ts [plugins/verific-i18next.ts]
-import { createVerific } from '@verific/core'
-import { i18nextMessages } from '@verific/i18next'
-import { createInstance } from 'i18next'
-import I18NextVue from 'i18next-vue'
+<<< ./localisation/examples/nuxt-i18next-plugin.ts#nuxt-plugin
 
-export default defineNuxtPlugin(async (nuxtApp) => {
-  const i18n = createInstance()
-  await i18n.init({
-    fallbackLng: 'en',
-    lng: 'en',
-    resources: {
-      en: { translation: { errors: { invalidEmail: 'Enter a valid email address' } } },
-      es: { translation: { errors: { invalidEmail: 'Introduce una dirección de correo válida' } } },
-    },
-  })
-
-  const messages = i18nextMessages(i18n, {
-    fallbackPrefix: 'errors',
-  })
-
-  nuxtApp.vueApp.use(I18NextVue, { i18next: i18n })
-  nuxtApp.vueApp.use(createVerific({ messages }))
-
-  if (import.meta.server)
-    nuxtApp.hook('app:rendered', messages.dispose)
-})
-```
+This displayed source is compiled in strict mode and exercised against the
+packed adapter on every supported Nuxt line.
 
 The adapter's `dispose()` is idempotent and removes its language, catalogue-load
 and resource-store listeners after each server render. On the client, the
@@ -273,24 +249,11 @@ missing-key tests.
 Import generated functions explicitly and use Nuxt request state as the required
 locale source:
 
-```ts [plugins/verific-paraglide.ts]
-import { createVerific } from '@verific/core'
-import { paraglideMessages } from '@verific/paraglide'
-import * as m from '~/paraglide/messages.js'
+<<< ./localisation/examples/nuxt-paraglide-plugin.ts#nuxt-plugin
 
-export default defineNuxtPlugin((nuxtApp) => {
-  const locale = useState<'en' | 'es'>('message-locale', () => 'en')
-  const messages = paraglideMessages({
-    'errors.required': m.errors_required,
-    'errors.invalidEmail': m.errors_invalid_email,
-  }, {
-    fallbackPrefix: 'errors',
-    locale: () => locale.value,
-  })
-
-  nuxtApp.vueApp.use(createVerific({ messages }))
-})
-```
+This displayed source is compiled in strict mode against real generated
+Paraglide output, then exercised against the packed adapter on every supported
+Nuxt line.
 
 Nuxt scopes `useState()` to the current server request and hydrates it for the
 client application. The getter therefore remains reactive without consulting a

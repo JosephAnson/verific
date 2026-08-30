@@ -9,7 +9,7 @@ Use `@verific/vue-i18n` with a caller-owned Vue I18n 11 Composition API Composer
 ## Install and configure the application
 
 ```bash
-pnpm add @verific/core @verific/vue-i18n vue vue-i18n zod
+pnpm add @verific/core @verific/vue-i18n vue vue-i18n@11.1.12 zod
 ```
 
 <<< ./examples/vue-i18n-setup.ts

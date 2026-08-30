@@ -42,6 +42,17 @@ async function main() {
       })
       await assertConcurrentRequestIsolation(localised, nuxtVersion)
 
+      const adapterConsumer = await createAdapterConsumer(
+        temporaryRoot,
+        nuxtVersion,
+        tarballs,
+        generatedParaglide,
+      )
+      await assertAdapterExamplesTypecheck(adapterConsumer, nuxtVersion)
+      for (const adapter of ['i18next', 'paraglide']) {
+        await assertAdapterRequestIsolation(adapterConsumer, nuxtVersion, adapter)
+      }
+
       const plain = await createConsumer(temporaryRoot, `nuxt-${nuxtVersion}-plain`, nuxtVersion, tarballs, false)
       assertLocalePackagesAbsent(plain)
       await assertRender(plain, {
@@ -718,6 +729,185 @@ async function createConsumer(temporaryRoot, name, nuxtVersion, tarballs, locali
   return directory
 }
 
+async function createAdapterConsumer(
+  temporaryRoot,
+  nuxtVersion,
+  tarballs,
+  generatedParaglide,
+) {
+  const name = `nuxt-${nuxtVersion}-adapter-recipes`
+  const directory = join(temporaryRoot, name)
+  await cp(fixture, directory, { recursive: true })
+  await writeFile(join(directory, 'package.json'), `${JSON.stringify({
+    name,
+    private: true,
+    type: 'module',
+  }, null, 2)}\n`)
+
+  await run(npmCommand, [
+    'install',
+    '--no-audit',
+    '--no-fund',
+    '--ignore-scripts',
+    `nuxt@${nuxtVersion}`,
+    '@inlang/paraglide-js@2.25.0',
+    'i18next@26.4.0',
+    'i18next-vue@5.4.0',
+    'typescript@5.9.3',
+    'vue-tsc@3.3.11',
+    tarballs['packages/core'],
+    tarballs['packages/i18n'],
+    tarballs['packages/i18next'],
+    tarballs['packages/paraglide'],
+    tarballs['packages/nuxt'],
+  ], directory, {
+    ...process.env,
+    npm_config_cache: process.env.VERIFIC_NPM_CACHE ?? join(temporaryRoot, '.npm-cache'),
+  })
+
+  const examples = join(root, 'playgrounds/docs/guide/localisation/examples')
+  await cp(
+    join(examples, 'nuxt-i18next-plugin.ts'),
+    join(directory, 'test-plugins/verific-i18next.ts'),
+  )
+  await cp(
+    join(examples, 'nuxt-paraglide-plugin.ts'),
+    join(directory, 'test-plugins/verific-paraglide.ts'),
+  )
+  await cp(generatedParaglide, join(directory, 'paraglide'), { recursive: true })
+  await writeFile(join(directory, 'app.vue'), adapterConsumerApp())
+  await writeFile(join(directory, 'nuxt.config.ts'), adapterConsumerConfig())
+  await writeFile(join(directory, 'tsconfig.json'), `${JSON.stringify({
+    extends: './.nuxt/tsconfig.json',
+    compilerOptions: {
+      skipLibCheck: true,
+      strict: true,
+    },
+  }, null, 2)}\n`)
+
+  return directory
+}
+
+function adapterConsumerConfig() {
+  return `
+    import process from 'node:process'
+
+    const adapter = process.env.VERIFIC_ADAPTER
+    if (adapter !== 'i18next' && adapter !== 'paraglide') {
+      throw new Error('VERIFIC_ADAPTER must select i18next or paraglide.')
+    }
+
+    export default defineNuxtConfig({
+      compatibilityDate: '2024-04-03',
+      modules: [['@verific/nuxt', { global: false }]],
+      plugins: [
+        '~/test-plugins/verific-' + adapter,
+        '~/test-plugins/request-barrier.server',
+      ],
+    })
+  `
+}
+
+function adapterConsumerApp() {
+  return `
+    <script setup lang="ts">
+    if (import.meta.server) {
+      const language = useRequestHeaders(['accept-language'])['accept-language']
+      const locale = language?.toLowerCase().startsWith('es') ? 'es' : 'en'
+      const requestBarrier = Reflect.get(useNuxtApp(), '$requestBarrier')
+      if (typeof requestBarrier === 'function') {
+        await requestBarrier(locale)
+        console.warn('[Verific test barrier] continued ' + locale)
+      }
+    }
+
+    const model = reactive({ email: '', diagnostic: '' })
+    const schema = {
+      '~standard': {
+        version: 1,
+        vendor: 'zod',
+        validate(value: { email: string, diagnostic: string }) {
+          return value.email
+            ? { value }
+            : {
+                issues: [
+                  {
+                    code: 'invalid_format',
+                    format: 'email',
+                    message: 'Email is required',
+                    path: ['email'],
+                  },
+                  {
+                    code: 'custom',
+                    message: 'Request-local diagnostic',
+                    path: ['diagnostic'],
+                  },
+                ],
+              }
+        },
+      },
+    } as const
+
+    const validation = useValidation(schema, model)
+    await validation.validate()
+    </script>
+
+    <template>
+      <p id="validation-message">
+        {{ validation.errorFor('email') }}
+      </p>
+      <p id="diagnostic-message">
+        {{ validation.errorFor('diagnostic') }}
+      </p>
+    </template>
+  `
+}
+
+async function assertAdapterExamplesTypecheck(directory, nuxtVersion) {
+  console.warn(`\nNuxt ${nuxtVersion} strict adapter recipe types`)
+  const environment = { ...process.env, VERIFIC_ADAPTER: 'i18next' }
+  await run(nuxiBinary(directory), ['prepare'], directory, environment)
+  await run(nuxiBinary(directory), ['typecheck'], directory, environment)
+}
+
+async function assertAdapterRequestIsolation(directory, nuxtVersion, adapter) {
+  const label = `Nuxt ${nuxtVersion} ${adapter} concurrent request isolation`
+  console.warn(`\n${label}`)
+  await rm(join(directory, '.nuxt'), { force: true, recursive: true })
+  await rm(join(directory, '.output'), { force: true, recursive: true })
+  const environment = { ...process.env, VERIFIC_ADAPTER: adapter }
+  await run(nuxtBinary(directory), ['build'], directory, environment)
+
+  const locales = ['en', 'es', 'en', 'es']
+  const { result: pages, output } = await useAvailableServer(
+    directory,
+    environment,
+    (url, server, readOutput) => Promise.all(locales.map(locale => request(
+      url,
+      server,
+      readOutput,
+      { headers: { 'accept-language': locale } },
+    ))),
+  )
+
+  const messages = {
+    en: 'Enter a valid email address',
+    es: 'Introduce una dirección de correo válida',
+  }
+  for (const [index, page] of pages.entries()) {
+    const locale = locales[index]
+    const otherLocale = locale === 'en' ? 'es' : 'en'
+    if (!page.includes(messages[locale]) || page.includes(messages[otherLocale])) {
+      throw new Error(`${label} leaked locale state for request ${index + 1}.\n${page}`)
+    }
+    if (!page.includes('Request-local diagnostic')) {
+      throw new Error(`${label} did not preserve raw fallback for request ${index + 1}.\n${page}`)
+    }
+  }
+
+  assertRequestBarrier(output, label, locales)
+}
+
 async function assertRequestLocalTypes(directory) {
   await assertTypes(directory, `
     import { createVerific } from '@verific/core'
@@ -813,21 +1003,23 @@ async function assertConcurrentRequestIsolation(directory, nuxtVersion) {
     }
   }
 
-  assertRequestBarrier(output, label)
+  assertRequestBarrier(output, label, locales)
 }
 
-function assertRequestBarrier(output, label) {
-  const arrivals = output.match(/\[Verific test barrier\] arrived (?:en|nl) \d\/4/g) ?? []
-  const continued = output.match(/\[Verific test barrier\] continued (?:en|nl)/g) ?? []
+function assertRequestBarrier(output, label, locales) {
+  const lines = output.split(/\r?\n/)
+  const arrivals = lines.filter(line => line.includes('[Verific test barrier] arrived '))
+  const continued = lines.filter(line => line.includes('[Verific test barrier] continued '))
   const releaseMarker = '[Verific test barrier] released 4/4'
   const releaseIndex = output.indexOf(releaseMarker)
 
   if (arrivals.length !== 4 || continued.length !== 4 || releaseIndex < 0) {
     throw new Error(`${label} did not complete the four-request barrier.\n${output}`)
   }
-  for (const locale of ['en', 'nl']) {
-    if (arrivals.filter(arrival => arrival.includes(`arrived ${locale} `)).length !== 2) {
-      throw new Error(`${label} did not record two ${locale} barrier participants.\n${arrivals.join('\n')}`)
+  for (const locale of new Set(locales)) {
+    const expected = locales.filter(candidate => candidate === locale).length
+    if (arrivals.filter(arrival => arrival.includes(`arrived ${locale} `)).length !== expected) {
+      throw new Error(`${label} did not record ${expected} ${locale} barrier participants.\n${arrivals.join('\n')}`)
     }
   }
   if (continued.some(marker => output.indexOf(marker) < releaseIndex)) {
@@ -955,6 +1147,10 @@ function hasExited(server) {
 
 function nuxtBinary(directory) {
   return join(directory, 'node_modules/.bin', process.platform === 'win32' ? 'nuxt.cmd' : 'nuxt')
+}
+
+function nuxiBinary(directory) {
+  return join(directory, 'node_modules/.bin', process.platform === 'win32' ? 'nuxi.cmd' : 'nuxi')
 }
 
 async function request(url, server, readOutput, init) {

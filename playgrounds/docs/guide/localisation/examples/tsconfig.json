@@ -8,7 +8,8 @@
       "@verific/i18n": ["../../../../../packages/i18n/src/main.ts"],
       "@verific/i18next": ["../../../../../packages/i18next/src/main.ts"],
       "@verific/paraglide": ["../../../../../packages/paraglide/src/main.ts"],
-      "@verific/vue-i18n": ["../../../../../packages/vue-i18n/src/main.ts"]
+      "@verific/vue-i18n": ["../../../../../packages/vue-i18n/src/main.ts"],
+      "~/*": ["./*"]
     },
     "allowJs": false,
     "declaration": false,

@@ -5,7 +5,7 @@ Vue I18n 11 message resolution for [Verific](https://verific.josephanson.com/).
 ## Install
 
 ```bash
-pnpm add @verific/core @verific/vue-i18n vue vue-i18n
+pnpm add @verific/core @verific/vue-i18n vue vue-i18n@11.1.12
 ```
 
 ## Start with shared errors
