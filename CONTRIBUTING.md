@@ -65,7 +65,7 @@ The documentation site uses VitePress and lives in `playgrounds/docs`. Keep exam
 
 Verific releases as one workspace. For a future version that has not yet been staged, run `pnpm release` from the repository root; it is the sole versioning entry point. Follow its prompts to select the new version and create the resulting release commit and tag. Do not rerun it for a version already staged in every manifest. The root manifest and every public package manifest must always use the same version, and the corresponding Git tag must be `v${version}`. Do not version or tag an individual package separately.
 
-Version `0.3.0` is staged but unreleased. The next release tag is `v0.3.0`; do not create another tag for this release. Create and push `v0.3.0` only after all release code and publication-workflow changes are merged to `main`, the trusted-publishing, environment and ruleset configuration below is complete, and every required CI check passes on `main`. Until then, do not publish the packages or create a GitHub Release.
+Version `0.3.0` is staged but unreleased. The next release tag is `v0.3.0`; do not create a different version or tag for this staged release. Create and push `v0.3.0` only after all release code and publication-workflow changes are merged to `main`, the trusted-publishing, environment and ruleset configuration below is complete, and every required CI check passes on `main`. Until then, do not publish the packages or create a GitHub Release.
 
 Configure trusted publishing for every public package:
 

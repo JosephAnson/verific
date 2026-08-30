@@ -10,7 +10,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    exclude: [...configDefaults.exclude],
+    exclude: [...configDefaults.exclude, 'playgrounds/docs/tests/browser/**'],
     coverage: {
       include: ['packages/*/src/**'],
       exclude: ['packages/core/src/main.ts', ...(configDefaults.coverage.exclude || [])],
