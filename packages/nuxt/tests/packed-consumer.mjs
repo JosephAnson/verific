@@ -137,7 +137,7 @@ async function assertPackedPackageConsumers(temporaryRoot, tarballs) {
 
 async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
   const directory = await createPackageConsumer(temporaryRoot, 'core-only', [
-    'vue@3.5.42',
+    'vue@3.4.26',
     tarballs['packages/core'],
   ])
   assertPackagesAbsent(directory, [
@@ -192,10 +192,14 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
     `,
   })
   await assertTypes(directory, `
-    import { createVerific, useValidation } from '@verific/core'
+    import { ErrorMessages, createVerific, useValidation } from '@verific/core'
     createVerific()
     useValidation
-  `)
+    const errorMessagesProps: InstanceType<typeof ErrorMessages>['$props'] = { messages: 'Required' }
+    errorMessagesProps.messages
+    declare const errorMessages: InstanceType<typeof ErrorMessages>
+    errorMessages.$slots.default?.({ message: 'Required', index: 0 })
+  `, { skipLibCheck: false })
 }
 
 async function assertSharedI18nConsumer(temporaryRoot, tarballs) {
@@ -438,14 +442,14 @@ async function assertModuleFormats(directory, sources) {
   await run(process.execPath, ['entry.cjs'], directory)
 }
 
-async function assertTypes(directory, source) {
+async function assertTypes(directory, source, { skipLibCheck = true } = {}) {
   await writeFile(join(directory, 'entry.ts'), source)
   await writeFile(join(directory, 'tsconfig.json'), `${JSON.stringify({
     compilerOptions: {
       module: 'ESNext',
       moduleResolution: 'Bundler',
       noEmit: true,
-      skipLibCheck: true,
+      skipLibCheck,
       strict: true,
       target: 'ES2022',
     },

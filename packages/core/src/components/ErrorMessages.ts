@@ -1,9 +1,29 @@
-import type { PropType, SlotsType, VNodeChild } from 'vue'
+import type { ComponentOptionsMixin, DefineComponent, PropType, PublicProps, SlotsType, VNodeChild } from 'vue'
 import type { Messages } from '../utils/createMessageArray'
 import { computed, defineComponent } from 'vue'
 import { createMessageArray } from '../utils/createMessageArray'
 
-export const ErrorMessages = /** #__PURE__ */ defineComponent({
+type ErrorMessagesSlots = SlotsType<{
+  default: (props: { message: string, index: number }) => VNodeChild
+}>
+
+type ErrorMessagesComponent = DefineComponent<
+  { messages: Messages },
+  () => VNodeChild[] | null,
+  Record<never, never>,
+  Record<never, never>,
+  Record<never, never>,
+  ComponentOptionsMixin,
+  ComponentOptionsMixin,
+  Record<never, never>,
+  string,
+  PublicProps,
+  Readonly<{ messages: Messages }>,
+  Record<never, never>,
+  ErrorMessagesSlots
+>
+
+export const ErrorMessages: ErrorMessagesComponent = /** #__PURE__ */ defineComponent({
   name: 'ErrorMessages',
   inheritAttrs: false,
   props: {
@@ -12,9 +32,7 @@ export const ErrorMessages = /** #__PURE__ */ defineComponent({
       required: true,
     },
   },
-  slots: Object as SlotsType<{
-    default: (props: { message: string, index: number }) => VNodeChild
-  }>,
+  slots: Object as ErrorMessagesSlots,
   setup(props, { slots }) {
     const messages = computed(() => createMessageArray(props.messages))
 
