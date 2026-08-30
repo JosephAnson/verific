@@ -1,8 +1,12 @@
 {
   "name": "@verific/core",
+  "type": "commonjs",
   "version": "0.2.0",
   "description": "Vue Validation Library",
-  "author": "Joseph Anson <https://github.com/josephanson>",
+  "author": {
+    "name": "Joseph Anson",
+    "url": "https://github.com/josephanson"
+  },
   "license": "MIT",
   "homepage": "https://verific.josephanson.com/",
   "repository": {

@@ -1,6 +1,8 @@
 ignoreScripts: true
 
-minimumReleaseAge: 0
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - zod@4.5.4
 
 shamefullyHoist: true
 
@@ -10,7 +12,10 @@ sideEffectsCache: false
 
 strictPeerDependencies: false
 
-trustPolicy: off
+trustPolicy: no-downgrade
+trustPolicyExclude:
+  - chokidar@4.0.3
+  - semver@6.3.1
 
 packages:
   - packages/*

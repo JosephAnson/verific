@@ -1,11 +1,6 @@
 {
   "name": "@verific/docs",
-  "version": "1.0.0",
-  "description": "",
-  "author": "",
-  "license": "ISC",
-  "keywords": [],
-  "main": "index.js",
+  "private": true,
   "scripts": {
     "dev": "vitepress dev",
     "build": "vitepress build",
