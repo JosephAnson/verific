@@ -6,7 +6,7 @@
   "license": "MIT",
   "homepage": "https://verific.josephanson.com/",
   "repository": {
-    "url": "git+https://github.com/josephanson/verific.git",
+    "url": "git+https://github.com/JosephAnson/verific.git",
     "type": "git",
     "directory": "packages/i18next"
   },

@@ -35,9 +35,6 @@ importers:
       bumpp:
         specifier: 12.2.2
         version: 12.2.2
-      changelogen:
-        specifier: 0.6.2
-        version: 0.6.2(magicast@0.5.4)
       changelogithub:
         specifier: 15.0.5
         version: 15.0.5(magicast@0.5.4)

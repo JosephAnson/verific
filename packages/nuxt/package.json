@@ -7,7 +7,7 @@
   "license": "MIT",
   "homepage": "https://verific.josephanson.com/",
   "repository": {
-    "url": "git+https://github.com/josephanson/verific.git",
+    "url": "git+https://github.com/JosephAnson/verific.git",
     "type": "git",
     "directory": "packages/nuxt"
   },
@@ -44,7 +44,6 @@
     "test": "vitest run tests",
     "test:integration": "node tests/packed-consumer.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json --skipLibCheck",
-    "release": "pnpm exec changelogen --release",
     "prepack": "pnpm build"
   },
   "peerDependencies": {

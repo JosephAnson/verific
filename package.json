@@ -10,7 +10,7 @@
   "homepage": "https://josephanson.com/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/josephanson/verific.git"
+    "url": "git+https://github.com/JosephAnson/verific.git"
   },
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
@@ -37,7 +37,8 @@
     "playgrounds:build": "pnpm --dir playgrounds/vue build && pnpm --dir playgrounds/nuxt build",
     "check": "pnpm dependencies:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm playgrounds:build && pnpm docs:check && pnpm test:integration",
     "release": "bumpp package.json packages/core/package.json packages/i18n/package.json packages/i18next/package.json packages/paraglide/package.json packages/vue-i18n/package.json packages/nuxt/package.json",
-    "publish:ci": "pnpm check && pnpm -r --filter \"./packages/**\" publish --access public --no-git-checks"
+    "release:check": "node scripts/check-release-version.mjs",
+    "publish:ci": "pnpm release:check && pnpm check && pnpm -r --filter \"./packages/**\" publish --access public --no-git-checks"
   },
   "peerDependencies": {
     "vue": "^3.4.26"
@@ -50,7 +51,6 @@
     "@verific/core": "workspace:*",
     "@vitest/coverage-v8": "^4.1.11",
     "bumpp": "12.2.2",
-    "changelogen": "0.6.2",
     "changelogithub": "15.0.5",
     "eslint": "^10.9.1",
     "jsdom": "^30.0.1",
