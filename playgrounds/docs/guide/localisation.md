@@ -14,7 +14,7 @@ Choose the adapter for the locale library your application already uses:
 
 | Application locale library | Adapter | Guide |
 | --- | --- | --- |
-| Vue I18n or `@nuxtjs/i18n` | `@verific/vue-i18n` | [Vue I18n](./localisation/vue-i18n) |
+| Vue I18n | `@verific/vue-i18n` | [Vue I18n](./localisation/vue-i18n) |
 | i18next or i18next-vue | `@verific/i18next` | [i18next](./localisation/i18next) |
 | Paraglide JS | `@verific/paraglide` | [Paraglide](./localisation/paraglide) |
 | Another catalogue | `@verific/i18n` | [Custom adapters](./localisation/custom-adapters) |
@@ -103,4 +103,4 @@ The tested baselines match each adapter package's peer dependencies.
 | `@verific/i18next` | `vue` (reactivity) | `^3.4.26` | `^3.5.42` |
 | `@verific/paraglide` | `@inlang/paraglide-js` | `>=2 <3` | `2.25.0` |
 
-Vue I18n, i18next and Paraglide are not transitive requirements of one another. See [Nuxt](./nuxt) for automatic Vue I18n integration and request-safe manual setup for the other adapters, or read the [message-resolution reference](./reference/messages) for the core contracts.
+Vue I18n, i18next and Paraglide are not transitive requirements of one another. See [Nuxt](./nuxt) for request-local application plugin examples, or read the [message-resolution reference](./reference/messages) for the core contracts.

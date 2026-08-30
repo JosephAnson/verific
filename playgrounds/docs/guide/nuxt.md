@@ -80,7 +80,11 @@ the complete controller interface.
 
 ## Run the real Nuxt playground
 
-The inline examples elsewhere in this guide prove Vue component behaviour. Nuxt module registration, auto-imports and request-local Vue I18n integration require a real Nuxt application, so they are exercised in the repository's [`playgrounds/nuxt`](https://github.com/josephanson/verific/tree/main/playgrounds/nuxt) application.
+The inline examples elsewhere in this guide prove Vue component behaviour. Nuxt
+module registration, auto-imports and request-local Vue I18n setup require a
+real Nuxt application, so they are exercised in the repository's
+[`playgrounds/nuxt`](https://github.com/josephanson/verific/tree/main/playgrounds/nuxt)
+application.
 
 From the root of a cloned repository, run:
 
@@ -90,55 +94,72 @@ pnpm build
 pnpm dev:nuxt
 ```
 
-Open the URL printed by Nuxt. The playground source covers the auto-imported `useValidation`, descendant registration, automatic localisation, locale changes without revalidation, and both Zod and Valibot Standard Schema validators.
+Open the URL printed by Nuxt. The playground source covers the auto-imported
+`useValidation`, descendant registration, request-local localisation, locale
+changes without revalidation, and both Zod and Valibot Standard Schema
+validators.
 
-## Automatic Vue I18n integration
+## Request-local Vue I18n
 
-Install the optional localisation packages:
+Install the adapter and its tested Vue I18n version:
 
 ```bash
-pnpm add @nuxtjs/i18n @verific/vue-i18n vue-i18n
+pnpm add @verific/core @verific/nuxt @verific/vue-i18n vue-i18n@11.1.12
 ```
 
-Keep `nuxt.config.ts` serialisable. The module obtains the current request's
-global Composer at runtime and creates an adapter for that Nuxt application.
+Disable the module's default Verific plugin. It still auto-imports
+`useValidation`.
 
 ```ts [nuxt.config.ts]
 export default defineNuxtConfig({
-  modules: ['@nuxtjs/i18n', '@verific/nuxt'],
-  i18n: {
-    locales: ['en', 'es'],
-    defaultLocale: 'en',
-    vueI18n: './i18n.config.ts',
-  },
-  verific: {
-    messages: {
-      adapter: 'vue-i18n',
-      fallbackPrefix: 'errors',
-      missing: 'warn',
-    },
-  },
+  modules: ['@verific/nuxt'],
+  verific: { global: false },
 })
 ```
 
 ```ts [i18n/i18n.config.ts]
-export default defineI18nConfig(() => ({
-  legacy: false,
-  locale: 'en',
-  fallbackLocale: 'en',
-  messages: {
-    en: {
-      forms: {
-        signup: {
-          email: { invalidEmail: 'Enter a valid email address' },
+export default function createI18nOptions() {
+  return {
+    legacy: false as const,
+    locale: 'en',
+    fallbackLocale: 'en',
+    messages: {
+      en: {
+        forms: {
+          signup: {
+            email: { invalidEmail: 'Enter a valid email address' },
+          },
+        },
+        errors: {
+          invalidEmail: 'Enter a valid email address',
         },
       },
-      errors: {
-        invalidEmail: 'Enter a valid email address',
-      },
     },
-  },
-}))
+  }
+}
+```
+
+Create both Vue I18n and Verific inside the Nuxt plugin. Nuxt runs this function
+for each application, so server requests do not share a mutable Composer or
+Verific adapter.
+
+```ts [plugins/verific.ts]
+import { createVerific } from '@verific/core'
+import { vueI18nMessages } from '@verific/vue-i18n'
+import { createI18n } from 'vue-i18n'
+import createI18nOptions from '~/i18n/i18n.config'
+
+export default defineNuxtPlugin((nuxtApp) => {
+  const i18n = createI18n(createI18nOptions())
+
+  nuxtApp.vueApp.use(i18n)
+  nuxtApp.vueApp.use(createVerific({
+    messages: vueI18nMessages(i18n.global, {
+      fallbackPrefix: 'errors',
+      missing: 'warn',
+    }),
+  }))
+})
 ```
 
 The following focused addition selects the form catalogue in the
@@ -157,20 +178,14 @@ run. Start with [Localisation](./localisation) for the shared-catalogue workflow
 then use the [Vue I18n adapter guide](./localisation/vue-i18n) for local
 Composers, missing-key checks and library-specific behaviour.
 
-The generated runtime plugin depends on Nuxt I18n's plugin and creates its
-adapter from `nuxtApp.$i18n`. It does not share the Composer, locale or
-missing-key diagnostics between server requests. Automatic integration requires
-Vue I18n Composition API mode (`legacy: false`).
+The plugin owns installation order directly and uses Vue I18n Composition API
+mode (`legacy: false`). It does not expose a `$i18n` compatibility shim.
 
-### Automatic options
+### Module option
 
 | Option | Default | Purpose |
 | --- | --- | --- |
 | `verific.global` | `true` | Install Verific for each Nuxt application. |
-| `verific.messages` | `false` | Disable localisation, or select the serialisable Vue I18n adapter. |
-| `messages.adapter` | required | Must be `'vue-i18n'`. |
-| `messages.fallbackPrefix` | none | Shared catalogue prefix tried after a form-specific key. |
-| `messages.missing` | adapter default | Use `'warn'` or `'silent'` for runtime missing-key diagnostics. |
 
 ## Component-local Vue I18n catalogue
 
@@ -196,12 +211,10 @@ const { errorsFor, validate } = useValidation(schema, { email }, {
 Set `fallbackRoot` to `false`. Otherwise Vue I18n could resolve through its
 global Composer before Verific can apply its resolver order.
 
-## Manual locale adapters
+## Other locale adapters
 
-Automatic localisation is intentionally limited to Vue I18n because
-`@nuxtjs/i18n` provides a stable request-local Composer. Use manual mode for
-i18next, Paraglide, a custom resolver or any configuration containing runtime
-functions:
+Use the same application-plugin boundary for i18next, Paraglide or a custom
+resolver:
 
 ```ts [nuxt.config.ts]
 export default defineNuxtConfig({
@@ -210,9 +223,8 @@ export default defineNuxtConfig({
 })
 ```
 
-Manual mode keeps the `useValidation` auto-import but adds no Verific runtime
-plugin and performs no localisation dependency checks. `global: false` cannot
-be combined with module-level `messages`.
+`global: false` keeps the `useValidation` auto-import but adds no Verific runtime
+plugin and performs no localisation dependency checks.
 
 ### Manual i18next plugin
 
@@ -288,14 +300,13 @@ missing-key tests.
 
 ## Supported versions
 
-| Package | Supported range | Tested baseline |
-| --- | --- | --- |
-| Nuxt | `>=3.21 <5` | `3.21.11`, `4.5.2` |
-| Nuxt I18n | `>=10.6 <11` | `10.6.0` |
-| Vue I18n | `>=11.4 <12` | `11.4.10` |
+| Integration | Direct dependency | Supported range | Tested baseline |
+| --- | --- | --- | --- |
+| `@verific/nuxt` | Nuxt | `>=3.21 <5` | `3.21.11`, `4.5.2` |
+| `@verific/vue-i18n` | Vue I18n | `>=11.1.12 <11.2` | `11.1.12` |
 
-Nuxt I18n, Vue I18n and `@verific/vue-i18n` are optional peers. Applications
-that leave `verific.messages` disabled do not need them.
+`@verific/nuxt` has no Vue I18n, Nuxt I18n or adapter peer. Applications install
+only the locale runtime and adapter they use.
 
 i18next and Paraglide are manual integrations and follow the compatibility
 ranges in the [localisation overview](./localisation#compatibility).

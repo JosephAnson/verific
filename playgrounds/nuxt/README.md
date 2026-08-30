@@ -11,4 +11,4 @@ pnpm --dir playgrounds/nuxt exec nuxi typecheck
 pnpm --dir playgrounds/nuxt build
 ```
 
-The pages use the auto-imported `useValidation` composable, automatic request-local Vue I18n integration, descendant registration and a component-local Composer override.
+The pages use the auto-imported `useValidation` composable, a request-local Vue I18n application plugin, descendant registration and a component-local Composer override.

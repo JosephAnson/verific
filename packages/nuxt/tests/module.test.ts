@@ -20,20 +20,13 @@ vi.mock('@nuxt/kit', () => ({
   tryResolveModule: kit.tryResolveModule,
 }))
 
-interface PluginTemplate {
-  filename: string
-  name: string
-  order: number
-  getContents: () => string
-}
-
 interface ModuleDefinition {
   meta: { compatibility: { nuxt: string } }
-  defaults: { global: boolean, messages: false }
+  defaults: { global: boolean }
   setup: (
     options: ModuleOptions,
     nuxt: { options: { build: { transpile: string[] } } },
-  ) => Promise<void>
+  ) => void
 }
 
 const moduleDefinition = verificModule as unknown as ModuleDefinition
@@ -41,29 +34,27 @@ const moduleDefinition = verificModule as unknown as ModuleDefinition
 describe('nuxt module', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    kit.tryResolveModule.mockResolvedValue('/resolved/package.mjs')
   })
 
-  it('defaults to one automatic core plugin and only the supported auto-import', async () => {
+  it('defaults to one core plugin and the useValidation auto-import', () => {
     const nuxt = createNuxt()
 
-    expect(moduleDefinition.defaults).toEqual({ global: true, messages: false })
+    expect(moduleDefinition.defaults).toEqual({ global: true })
     expect(moduleDefinition.meta.compatibility.nuxt).toBe('>=3.21.0 <5.0.0')
 
-    await moduleDefinition.setup({ global: true, messages: false }, nuxt)
+    moduleDefinition.setup({ global: true }, nuxt)
 
     expect(kit.addPlugin).toHaveBeenCalledWith({
       src: './runtime/plugin',
       name: 'verific:plugin',
       order: 20,
     })
-    expect(kit.addPluginTemplate).not.toHaveBeenCalled()
     expect(kit.addImports).toHaveBeenCalledWith({ name: 'useValidation', from: '@verific/core' })
     expect(nuxt.options.build.transpile[0]).toMatch(/src\/runtime$/)
   })
 
-  it('keeps auto-imports but performs no plugin or dependency work in manual mode', async () => {
-    await moduleDefinition.setup({ global: false }, createNuxt())
+  it('keeps the auto-import but performs no plugin work in manual mode', () => {
+    moduleDefinition.setup({ global: false }, createNuxt())
 
     expect(kit.addPlugin).not.toHaveBeenCalled()
     expect(kit.addPluginTemplate).not.toHaveBeenCalled()
@@ -71,88 +62,19 @@ describe('nuxt module', () => {
     expect(kit.addImports).toHaveBeenCalledWith({ name: 'useValidation', from: '@verific/core' })
   })
 
-  it('rejects message options at runtime when automatic installation is disabled', async () => {
-    await expect(moduleDefinition.setup({
-      global: false,
-      messages: { adapter: 'vue-i18n' },
-    } as ModuleOptions, createNuxt())).rejects.toThrow('cannot be combined')
-
-    expect(kit.tryResolveModule).not.toHaveBeenCalled()
-  })
-
-  it('serialises static Vue I18n options into an ordered generated plugin', async () => {
-    const messages = {
-      adapter: 'vue-i18n' as const,
-      fallbackPrefix: 'errors',
-      missing: 'silent' as const,
-    }
-
-    await moduleDefinition.setup({ global: true, messages }, createNuxt())
-
-    expect(kit.tryResolveModule).toHaveBeenNthCalledWith(1, '@verific/vue-i18n', expect.any(String))
-    expect(kit.tryResolveModule).toHaveBeenNthCalledWith(2, '@nuxtjs/i18n', expect.any(String))
-    expect(kit.addPlugin).not.toHaveBeenCalled()
-    expect(kit.addPluginTemplate).toHaveBeenCalledOnce()
-
-    const [template, registration] = kit.addPluginTemplate.mock.calls[0] as [PluginTemplate, { append: boolean }]
-    const source = template.getContents()
-    expect(template).toMatchObject({
-      filename: 'verific.vue-i18n.mjs',
-      name: 'verific:plugin',
-      order: 20,
-    })
-    expect(registration).toEqual({ append: true })
-    expect(source).toContain('import { vueI18nMessages } from \'@verific/vue-i18n\'')
-    expect(source).toContain('name: \'verific:plugin\'')
-    expect(source).toContain('order: 20')
-    expect(source).toContain('dependsOn: [\'i18n:plugin\']')
-    expect(source).toContain('installVueI18nVerific(nuxtApp, {"fallbackPrefix":"errors","missing":"silent"}, vueI18nMessages)')
-  })
-
-  it('rejects non-serialisable and unsupported JavaScript message configuration', async () => {
-    await expect(moduleDefinition.setup({
+  it('ignores stale message configuration instead of restoring localisation behaviour', () => {
+    const staleOptions = {
       global: true,
-      messages: {
-        adapter: 'vue-i18n',
-        key: () => ['errors.invalid'],
+      get messages(): never {
+        throw new Error('messages must not be read')
       },
-    } as unknown as ModuleOptions, createNuxt())).rejects.toThrow('must be `false` or a serialisable')
+    } as unknown as ModuleOptions
 
-    expect(kit.tryResolveModule).not.toHaveBeenCalled()
-  })
+    expect(() => moduleDefinition.setup(staleOptions, createNuxt())).not.toThrow()
 
-  it.each([
-    null,
-    0,
-    '',
-    [],
-    {},
-    { adapter: 'other' },
-    { adapter: 'vue-i18n', fallbackPrefix: 1 },
-    { adapter: 'vue-i18n', missing: 'throw' },
-  ])('rejects invalid automatic message configuration: %j', async (messages) => {
-    await expect(moduleDefinition.setup({
-      global: true,
-      messages,
-    } as unknown as ModuleOptions, createNuxt())).rejects.toThrow('must be `false` or a serialisable')
-
-    expect(kit.addPlugin).not.toHaveBeenCalled()
+    expect(kit.addPlugin).toHaveBeenCalledOnce()
     expect(kit.addPluginTemplate).not.toHaveBeenCalled()
     expect(kit.tryResolveModule).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    ['@verific/vue-i18n', 'Install `@verific/vue-i18n`'],
-    ['@nuxtjs/i18n', 'Install and register `@nuxtjs/i18n'],
-  ])('reports an actionable missing optional peer for %s', async (missingPackage, expected) => {
-    kit.tryResolveModule.mockImplementation((packageName: string) => (
-      packageName === missingPackage ? undefined : '/resolved/package.mjs'
-    ))
-
-    await expect(moduleDefinition.setup({
-      global: true,
-      messages: { adapter: 'vue-i18n' },
-    }, createNuxt())).rejects.toThrow(expected)
   })
 })
 

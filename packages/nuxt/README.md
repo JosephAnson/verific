@@ -13,12 +13,12 @@ export default defineNuxtConfig({
 })
 ```
 
-Localisation is optional. The module can create a request-local Vue I18n
-adapter, or leave installation to an application plugin for another locale
-library.
+Localisation is application-owned. Set `verific.global` to `false`, then create
+the locale library and Verific inside an application plugin so every server
+request receives fresh state.
 
 Read the canonical [Nuxt guide](https://verific.josephanson.com/guide/nuxt) for
-automatic and manual configuration, compatibility and examples. See the
+configuration, request-local localisation and examples. See the
 [`useValidation` reference](https://verific.josephanson.com/guide/reference/use-validation)
 for the auto-imported composable.
 

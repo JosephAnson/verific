@@ -4,7 +4,7 @@ outline: deep
 
 # Vue I18n
 
-Use `@verific/vue-i18n` with a caller-owned Vue I18n 11 Composition API Composer. The same adapter powers the automatic Nuxt I18n integration.
+Use `@verific/vue-i18n` with a caller-owned Vue I18n 11 Composition API Composer.
 
 ## Install and configure the application
 
@@ -106,6 +106,9 @@ const messages = vueI18nMessages(i18n.global, {
 })
 ```
 
-For SSR, obtain the Composer from the current application or request. `@verific/nuxt` does this automatically with `@nuxtjs/i18n`; see [Nuxt automatic Vue I18n](../nuxt#automatic-vue-i18n-integration). Do not share a mutable Composer between requests.
+For SSR, obtain the Composer from the current application or request. In Nuxt,
+set `verific.global` to `false` and create Vue I18n plus Verific inside each
+application plugin execution; see [Nuxt request-local Vue I18n](../nuxt#request-local-vue-i18n).
+Do not share a mutable Composer between requests.
 
 See the [shared missing-message policies](../localisation#missing-messages) and [`@verific/vue-i18n` package README](https://github.com/josephanson/verific/tree/main/packages/vue-i18n) for the complete adapter surface.

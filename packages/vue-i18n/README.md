@@ -76,7 +76,7 @@ vueI18nMessages(composer, {
 
 A component-local Composer is supported when the caller sets `composer.fallbackRoot = false` before creating the adapter. Pass that adapter through a registration's `messages` option; its translations are tried before inherited application messages. Each candidate is checked across the supplied Composer's locale chain before the next candidate, and the selected locale is used explicitly for translation.
 
-Use `missing: 'throw'` in exercised tests and read `errorsFor()` after validation to fail on a missing key. For SSR, obtain the Composer from the current application or request; do not share a mutable Composer between requests. `@verific/nuxt` provides the automatic request-safe path for `@nuxtjs/i18n`.
+Use `missing: 'throw'` in exercised tests and read `errorsFor()` after validation to fail on a missing key. For SSR, obtain the Composer from the current application or request; do not share a mutable Composer between requests. In Nuxt, create Vue I18n and Verific together inside each application plugin execution.
 
 See the dedicated [Vue I18n guide](https://verific.josephanson.com/guide/localisation/vue-i18n) for a complete accessible form, locale switching, local Composers, missing-key tests and Nuxt guidance. See the [message reference](https://verific.josephanson.com/guide/reference/messages) for the complete contract.
 
