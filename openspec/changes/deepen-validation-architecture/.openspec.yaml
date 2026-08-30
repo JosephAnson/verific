@@ -1,0 +1,6 @@
+schema: spec-driven
+skip_specs: true
+created: 2026-08-30
+goal: Deepen Verific's Scope lifecycle, Registration observation, Issue-to-Error
+  pipeline, rendered-validation documentation audit and Locale adapter contract
+  verification without changing the public validation interface.
