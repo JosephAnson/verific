@@ -68,6 +68,29 @@ describe('checkPublishWorkflow', () => {
     expectFailure(replaceOnce(validWorkflow, original, replacement), message)
   })
 
+  it.each(['null', 'Null', 'NULL', '~'])('rejects the plain YAML null concurrency group %s', (value) => {
+    const workflow = replaceOnce(
+      validWorkflow,
+      '  group: publish-release',
+      `  group: ${value}`,
+    )
+
+    expectFailure(workflow, 'fixed, non-expression group name')
+  })
+
+  it.each(['\'null\'', '"null"'])('accepts the quoted concurrency group %s', (value) => {
+    const workflow = replaceOnce(
+      validWorkflow,
+      '  group: publish-release',
+      `  group: ${value}`,
+    )
+
+    expect(checkPublishWorkflow(workflow)).toEqual({
+      actionCount: 6,
+      jobCount: 3,
+    })
+  })
+
   it.each([
     ['single quotes', '\'false\''],
     ['double quotes', '"false"'],

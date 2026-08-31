@@ -156,8 +156,9 @@ function validateConcurrency(value, problems) {
 
   expectExactKeys(concurrency, ['group', 'queue', 'cancel-in-progress'], 'Release concurrency', problems)
 
-  const group = scalarValue(concurrency.group)
-  if (group === undefined || !/^[\w.-]+$/u.test(group))
+  const groupScalar = concurrency.group
+  const group = scalarValue(groupScalar)
+  if (group === undefined || isPlainYamlNull(groupScalar) || !/^[\w.-]+$/u.test(group))
     problems.push('Release concurrency must use a fixed, non-expression group name.')
 
   expectScalar(concurrency.queue, 'max', 'Release concurrency must set `queue: max`.', problems)
@@ -395,6 +396,12 @@ function expectScalar(value, expected, problem, problems) {
 
 function scalarValue(value) {
   return isScalar(value) ? value.value : undefined
+}
+
+function isPlainYamlNull(value) {
+  return isScalar(value)
+    && value.style === 'plain'
+    && /^(?:null|Null|NULL|~)$/u.test(value.value)
 }
 
 function isScalar(value) {
