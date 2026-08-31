@@ -40,10 +40,11 @@
     "docs:check": "pnpm build && pnpm docs:check:built",
     "docs:check:built": "pnpm --dir playgrounds/docs check",
     "playgrounds:build": "pnpm --dir playgrounds/vue build && pnpm --dir playgrounds/nuxt build",
-    "check": "pnpm dependencies:check && pnpm lint && pnpm typecheck && pnpm packages:compatibility:built && pnpm test:coverage && pnpm playgrounds:build && pnpm docs:check:built && pnpm test:integration:built",
-    "release": "bumpp package.json packages/core/package.json packages/i18n/package.json packages/i18next/package.json packages/paraglide/package.json packages/vue-i18n/package.json packages/nuxt/package.json",
+    "check": "pnpm release:policy && pnpm dependencies:check && pnpm lint && pnpm typecheck && pnpm packages:compatibility:built && pnpm test:coverage && pnpm playgrounds:build && pnpm docs:check:built && pnpm test:integration:built",
+    "release": "bumpp package.json packages/core/package.json packages/i18n/package.json packages/i18next/package.json packages/nuxt/package.json packages/paraglide/package.json packages/vue-i18n/package.json --no-commit --no-tag --no-push --ignore-scripts",
     "release:check": "node scripts/check-release-version.mjs",
-    "publish:ci": "pnpm release:check --publish && pnpm check && pnpm -r --filter \"./packages/**\" publish --access public --no-git-checks"
+    "release:policy": "node scripts/check-manual-release.mjs",
+    "release:publish": "node scripts/publish-release.mjs"
   },
   "peerDependencies": {
     "vue": "^3.4.26"
@@ -63,7 +64,8 @@
     "publint": "^0.3.24",
     "typescript": "5.9.3",
     "vitest": "^4.1.11",
-    "vue": "^3.5.42"
+    "vue": "^3.5.42",
+    "yaml": "^2.9.0"
   },
   "lint-staged": {
     "*.ts": [

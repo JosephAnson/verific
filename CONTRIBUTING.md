@@ -63,11 +63,30 @@ The documentation site uses VitePress and lives in `playgrounds/docs`. Keep exam
 
 ## Releasing
 
-Verific releases as one workspace. For a future version that has not yet been staged, run `pnpm release` from the repository root; it is the sole versioning entry point. Follow its prompts to select the new version and create the resulting release commit and tag. Do not rerun it for a version already staged in every manifest. The root manifest and every public package manifest must always use the same version, and the corresponding Git tag must be `v${version}`. Do not version or tag an individual package separately.
+Verific releases as one workspace. The root manifest and all six public package manifests must always use the same stable version, with one matching `v${version}` tag. Never version or tag a package independently.
 
-Version `0.3.0` is staged but unreleased. The next release tag is `v0.3.0`; do not create a different version or tag for this staged release. Create and push `v0.3.0` only after all release code and publication-workflow changes are merged to `main`, the trusted-publishing, environment and ruleset configuration below is complete, and every required CI check passes on `main`. Until then, do not publish the packages or create a GitHub Release.
+For a future version that has not been staged, run `pnpm release` from the repository root. This is the sole versioning entry point. It updates all seven manifests without running lifecycle scripts, committing, tagging or pushing; review the resulting diff, commit it, push `main`, and wait for required CI to pass before creating the tag. Do not rerun the command for a version already staged in every manifest.
 
-Configure trusted publishing for every public package:
+Before creating any release tag, protect `main` from deletion and force pushes, and protect `v*` tags from updates and deletions while allowing only the release maintainer to create them. Stop if those rules are absent. A break-glass ruleset change must be documented, approved and restored immediately; it must never be used to replace an npm release.
+
+Version `0.3.0` is staged but unreleased, so do not run `pnpm release` for it. Once these release changes are on green current `main`, prepare the immutable tag manually:
+
+```bash
+git switch main
+git pull --ff-only
+git tag -a v0.3.0 -m "v0.3.0"
+git push origin v0.3.0
+```
+
+Pushing the tag does not publish packages or create a GitHub Release. Authenticate in the local terminal and invoke the sole npm-writing entry point yourself:
+
+```bash
+npm login
+npm whoami
+pnpm release:publish
+```
+
+For an initial publication, `release:publish` fails before publication unless all manifests agree, every package targets the public npm registry, the working tree is clean, `origin` is the canonical Verific repository, current `main` matches both fetched and live remote `main`, and local and remote `v0.3.0` tags point to that commit. It checks npm for an existing partial release, verifies the npm account, runs the complete `pnpm check` gate, repeats the Git identity check, packs these exact packages once into a temporary directory, publishes their tarballs with pnpm's `main` branch safeguard enabled, and confirms every exact package version and SHA-512 integrity on npm:
 
 - `@verific/core`
 - `@verific/i18n`
@@ -76,32 +95,29 @@ Configure trusted publishing for every public package:
 - `@verific/paraglide`
 - `@verific/nuxt`
 
-Each package must use these exact npm trusted publisher settings:
+The local path deliberately does not request npm provenance: npm only generates provenance for supported cloud CI publishers. Let npm prompt interactively for any web authentication or one-time password; never put credentials or OTP values in a script, command history or committed `.npmrc`. The repository workflows require no npm credential. Remove any obsolete `NPM_TOKEN` repository secret or npm trusted-publisher entry after confirming it is not used elsewhere.
 
-| Setting | Value |
-| --- | --- |
-| Provider | GitHub Actions |
-| Organisation or user | `JosephAnson` |
-| Repository | `verific` |
-| Workflow | `publish.yml` |
-| Environment | `release` |
-| Allowed action | `npm publish` |
+If publication stops after only some packages succeed, fix only a transient authentication, network or registry problem and rerun `pnpm release:publish` from the same clean commit and immutable tag. The command confirms that at least one exact package version already exists before enabling retry mode. If `main` has advanced, fetch current refs and use a detached checkout of the immutable tag:
 
-The publish job authenticates to npm with GitHub Actions OIDC. Do not create or store a long-lived npm access token, including an `NPM_TOKEN` repository or environment secret.
+```bash
+git fetch origin main --tags
+git switch --detach v0.3.0
+pnpm release:publish
+git switch main
+```
 
-Create a GitHub environment named `release`. Under **Deployment branches and tags**, choose **Selected branches and tags**, add a tag rule for `v*`, and add no branch rule. Configure required reviewers so a maintainer must approve each deployment.
+Retry mode requires the tagged commit to remain in current canonical `origin/main` history. Its stronger custom clean-tree, canonical-origin, ancestry and local/remote-tag checks replace pnpm's tip-of-branch check so an older immutable tag can finish. Before any further write, the command repacks all six packages and requires every existing npm tarball to have the same SHA-512 integrity; it then publishes only missing tarballs and verifies all six. An integrity mismatch means the partial release did not come from these guarded contents: stop and use a new coordinated version. Do not unpublish, replace, move, delete or reuse that release identity.
 
-Protect release tags with two repository tag rulesets targeting `v*`. In the first, enable **Restrict creations** and give the repository administrator role bypass permission so the owner, acting as release maintainer, can create matching tags. In the second, enable **Restrict updates** and **Restrict deletions** with no bypass actor. A release tag is immutable once publication starts: do not move or delete it. For this user-owned repository, emergency recovery requires an owner-controlled temporary change to the second ruleset. Treat it as a break-glass action: document and approve the reason before use, record the change and restoration for audit, and restore the ruleset immediately afterwards.
+Only after `release:publish` succeeds, create the public release manually:
 
-For each tagged release, the workflow must complete in this order:
+```bash
+gh release create v0.3.0 \
+  --generate-notes \
+  --verify-tag \
+  --repo JosephAnson/verific
+```
 
-1. Verify that the tag, workspace version and all package manifests agree, then run the release checks.
-2. Publish all six packages to npm.
-3. Create the GitHub Release only after every npm publication succeeds.
-
-If a run fails after publishing only some packages, rerun the workflow for the same tag only when the failure is transient or external and the immutable release commit and package contents are already correct. Keep the existing version, commit and tag, and do not unpublish completed packages: already published package-version pairs are treated as complete, only missing packages are published, and the GitHub Release is created once all six packages are available on npm. If any package contents need to change, do not move or reuse the tag or try to replace a published package version. npm package versions are immutable, so make the corrections and create a new coordinated workspace version, release commit and matching tag.
-
-GitHub Releases are the canonical public release history. Keep release notes there rather than in package-specific changelogs.
+If this command fails, retry it without republishing. GitHub Releases are the canonical public release history.
 
 ## Commits and pull requests
 

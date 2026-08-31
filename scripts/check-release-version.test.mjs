@@ -2,12 +2,18 @@ import { Buffer } from 'node:buffer'
 import process from 'node:process'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  checkReleaseGitState,
   checkReleaseVersions,
-  isHeadOnOriginMain,
+  expectedPublicPackageNames,
+  isCanonicalOriginUrl,
+  npmRegistry,
+  readReleaseGitState,
   readReleaseManifests,
 } from './check-release-version.mjs'
 
 const releaseVersion = '0.3.0'
+const releaseTag = `v${releaseVersion}`
+const releaseCommit = 'a'.repeat(40)
 
 const rootManifest = {
   manifest: {
@@ -19,13 +25,14 @@ const rootManifest = {
 }
 
 const packageManifests = [
-  {
+  ...expectedPublicPackageNames.map(name => ({
     manifest: {
-      name: '@verific/core',
+      name,
+      publishConfig: { access: 'public', registry: npmRegistry },
       version: releaseVersion,
     },
-    path: 'packages/core/package.json',
-  },
+    path: `packages/${name.slice('@verific/'.length)}/package.json`,
+  })),
   {
     manifest: {
       name: '@verific/private-fixture',
@@ -36,27 +43,47 @@ const packageManifests = [
   },
 ]
 
-describe('checkReleaseVersions', () => {
-  it('accepts coordinated stable package and tag versions from main in publish mode', () => {
-    const checkMainAncestry = vi.fn(() => true)
+const validGitState = {
+  branch: 'main',
+  head: releaseCommit,
+  headIsOnOriginMain: true,
+  localTagCommit: releaseCommit,
+  originUrl: 'https://github.com/JosephAnson/verific.git',
+  originMainCommit: releaseCommit,
+  remoteMainCommit: releaseCommit,
+  remoteTagCommit: releaseCommit,
+  status: '',
+}
 
-    expect(checkReleaseVersions({
-      checkMainAncestry,
-      packageManifests,
-      publish: true,
-      refType: 'tag',
-      rootManifest,
-      tag: `v${releaseVersion}`,
-    })).toEqual({
-      publicPackageCount: 1,
+describe('checkReleaseVersions', () => {
+  it('accepts the coordinated stable package set', () => {
+    expect(checkReleaseVersions({ packageManifests, rootManifest })).toEqual({
+      publicPackageCount: 6,
+      tag: releaseTag,
       version: releaseVersion,
     })
-    expect(checkMainAncestry).toHaveBeenCalledOnce()
+  })
+
+  it('accepts the exact clean local and remote identity in publish mode', () => {
+    const readGitState = vi.fn(() => validGitState)
+
+    expect(checkReleaseVersions({
+      packageManifests,
+      publish: true,
+      readGitState,
+      rootManifest,
+    })).toEqual({
+      commit: releaseCommit,
+      publicPackageCount: 6,
+      tag: releaseTag,
+      version: releaseVersion,
+    })
+    expect(readGitState).toHaveBeenCalledWith(releaseTag)
   })
 
   it('ignores private package versions', () => {
-    expect(checkReleaseVersions({ packageManifests, rootManifest })).toEqual({
-      publicPackageCount: 1,
+    expect(checkReleaseVersions({ packageManifests, rootManifest })).toMatchObject({
+      publicPackageCount: 6,
       version: releaseVersion,
     })
   })
@@ -89,29 +116,13 @@ describe('checkReleaseVersions', () => {
     )
   })
 
-  it('rejects an unstable public package even when the root is stable', () => {
-    const prereleasePackages = packageManifests.map(packageManifest => packageManifest.manifest.private
-      ? packageManifest
-      : {
-          ...packageManifest,
-          manifest: { ...packageManifest.manifest, version: '0.3.0-beta.1' },
-        })
-
-    expect(() => checkReleaseVersions({
-      packageManifests: prereleasePackages,
-      rootManifest,
-    })).toThrowError(
-      'packages/core/package.json must use a stable x.y.z version without prerelease, build metadata or leading zeroes; received "0.3.0-beta.1".',
-    )
-  })
-
   it('rejects public package version drift with the manifest path', () => {
-    const driftedPackages = packageManifests.map(packageManifest => packageManifest.manifest.private
-      ? packageManifest
-      : {
+    const driftedPackages = packageManifests.map(packageManifest => packageManifest.manifest.name === '@verific/core'
+      ? {
           ...packageManifest,
           manifest: { ...packageManifest.manifest, version: '0.3.1' },
-        })
+        }
+      : packageManifest)
 
     expect(() => checkReleaseVersions({
       packageManifests: driftedPackages,
@@ -121,126 +132,231 @@ describe('checkReleaseVersions', () => {
     )
   })
 
-  it('rejects a tag that is not the exact version tag', () => {
+  it('rejects a package that could publish outside the public npm registry', () => {
+    const unsafePackages = packageManifests.map(packageManifest => packageManifest.manifest.name === '@verific/core'
+      ? {
+          ...packageManifest,
+          manifest: {
+            ...packageManifest.manifest,
+            publishConfig: { access: 'restricted', registry: 'https://registry.example.com/' },
+          },
+        }
+      : packageManifest)
+
     expect(() => checkReleaseVersions({
-      packageManifests,
+      packageManifests: unsafePackages,
       rootManifest,
-      tag: releaseVersion,
-    })).toThrowError(
-      'Git tag "0.3.0" does not match version "0.3.0"; expected "v0.3.0".',
+    })).toThrowError('packages/core/package.json must set publishConfig.access to "public"')
+
+    expect(() => checkReleaseVersions({
+      packageManifests: unsafePackages,
+      rootManifest,
+    })).toThrowError(`packages/core/package.json must set publishConfig.registry to "${npmRegistry}"`)
+  })
+
+  it('rejects a missing or unexpected public package before inspecting Git', () => {
+    const readGitState = vi.fn(() => validGitState)
+    const incompletePackages = packageManifests.filter(
+      packageManifest => packageManifest.manifest.name !== '@verific/nuxt',
     )
-  })
-
-  it('rejects publish mode without a ref name before checking ancestry', () => {
-    const checkMainAncestry = vi.fn(() => true)
 
     expect(() => checkReleaseVersions({
-      checkMainAncestry,
-      packageManifests,
+      packageManifests: incompletePackages,
       publish: true,
-      refType: 'tag',
+      readGitState,
       rootManifest,
-    })).toThrowError('GITHUB_REF_NAME must be set in publish mode.')
-    expect(checkMainAncestry).not.toHaveBeenCalled()
+    })).toThrowError('Public package set must be exactly')
+    expect(readGitState).not.toHaveBeenCalled()
   })
 
-  it('rejects a matching branch before checking ancestry', () => {
-    const checkMainAncestry = vi.fn(() => true)
+  it('does not inspect Git outside publish mode', () => {
+    const readGitState = vi.fn(() => validGitState)
+
+    checkReleaseVersions({ packageManifests, readGitState, rootManifest })
+
+    expect(readGitState).not.toHaveBeenCalled()
+  })
+
+  it('does not inspect Git when a manifest version is invalid', () => {
+    const readGitState = vi.fn(() => validGitState)
 
     expect(() => checkReleaseVersions({
-      checkMainAncestry,
       packageManifests,
       publish: true,
-      refType: 'branch',
-      rootManifest,
-      tag: `v${releaseVersion}`,
-    })).toThrowError('GITHUB_REF_TYPE must be "tag" in publish mode; received "branch".')
-    expect(checkMainAncestry).not.toHaveBeenCalled()
-  })
-
-  it('does not check ancestry outside publish mode', () => {
-    const checkMainAncestry = vi.fn(() => true)
-
-    checkReleaseVersions({ checkMainAncestry, packageManifests, rootManifest })
-
-    expect(checkMainAncestry).not.toHaveBeenCalled()
-  })
-
-  it('does not check ancestry when a manifest version is invalid', () => {
-    const checkMainAncestry = vi.fn(() => true)
-
-    expect(() => checkReleaseVersions({
-      checkMainAncestry,
-      packageManifests,
-      publish: true,
-      refType: 'tag',
+      readGitState,
       rootManifest: {
         ...rootManifest,
         manifest: { ...rootManifest.manifest, version: '0.3.0-beta.1' },
       },
-      tag: 'v0.3.0-beta.1',
     })).toThrowError('package.json must use a stable x.y.z version')
-    expect(checkMainAncestry).not.toHaveBeenCalled()
+    expect(readGitState).not.toHaveBeenCalled()
   })
 
-  it('rejects a tag commit outside origin/main', () => {
+  it('fails closed when Git inspection throws unexpectedly', () => {
     expect(() => checkReleaseVersions({
-      checkMainAncestry: () => false,
       packageManifests,
       publish: true,
-      refType: 'tag',
-      rootManifest,
-      tag: `v${releaseVersion}`,
-    })).toThrowError('HEAD must be an ancestor of origin/main in publish mode.')
-  })
-
-  it('fails closed when the ancestry predicate throws unexpectedly', () => {
-    expect(() => checkReleaseVersions({
-      checkMainAncestry: () => {
+      readGitState: () => {
         throw new Error('broken Git fixture')
       },
-      packageManifests,
-      publish: true,
-      refType: 'tag',
       rootManifest,
-      tag: `v${releaseVersion}`,
-    })).toThrowError(
-      'Could not verify that HEAD is an ancestor of origin/main: broken Git fixture',
-    )
+    })).toThrowError('Could not inspect the manual release Git identity: broken Git fixture')
   })
 })
 
-describe('isHeadOnOriginMain', () => {
-  it('runs the local Git ancestry predicate without a shell or fetch', () => {
-    const runGit = vi.fn()
-
-    expect(isHeadOnOriginMain(runGit)).toBe(true)
-    expect(runGit).toHaveBeenCalledWith(
-      'git',
-      ['merge-base', '--is-ancestor', 'HEAD', 'origin/main'],
-      { stdio: 'pipe' },
-    )
+describe('checkReleaseGitState', () => {
+  it('accepts the exact clean current main identity', () => {
+    expect(checkReleaseGitState({ ...validGitState, tag: releaseTag })).toEqual([])
   })
 
-  it('returns false only for the expected non-ancestor exit status', () => {
-    const runGit = vi.fn(() => {
-      throw Object.assign(new Error('not an ancestor'), { status: 1 })
+  it.each([
+    ['status', '?? scratch.txt', 'working tree must be clean'],
+    ['branch', 'release', 'current branch must be "main"'],
+    ['originUrl', 'https://github.com/example/verific.git', 'Origin must be the canonical'],
+    ['originMainCommit', 'b'.repeat(40), 'fetched origin/main ref must match the live origin main'],
+    ['remoteMainCommit', 'b'.repeat(40), 'fetched origin/main ref must match the live origin main'],
+    ['localTagCommit', undefined, `Local tag "${releaseTag}" must point to HEAD`],
+    ['remoteTagCommit', 'b'.repeat(40), `Remote tag "${releaseTag}" must point to HEAD`],
+  ])('rejects invalid %s state', (field, value, expected) => {
+    expect(checkReleaseGitState({
+      ...validGitState,
+      [field]: value,
+      tag: releaseTag,
+    })).toContainEqual(expect.stringContaining(expected))
+  })
+
+  it('reports all identity problems together', () => {
+    expect(checkReleaseGitState({
+      ...validGitState,
+      branch: '',
+      localTagCommit: undefined,
+      remoteTagCommit: undefined,
+      status: ' M package.json',
+      tag: releaseTag,
+    })).toHaveLength(4)
+  })
+
+  it('allows an immutable tagged ancestor only for a confirmed partial-release retry', () => {
+    const currentMain = 'b'.repeat(40)
+
+    expect(checkReleaseGitState({
+      ...validGitState,
+      allowMainDescendant: true,
+      branch: '',
+      originMainCommit: currentMain,
+      remoteMainCommit: currentMain,
+      tag: releaseTag,
+    })).toEqual([])
+
+    expect(checkReleaseGitState({
+      ...validGitState,
+      branch: '',
+      originMainCommit: currentMain,
+      remoteMainCommit: currentMain,
+      tag: releaseTag,
+    })).toEqual(expect.arrayContaining([
+      expect.stringContaining('current branch must be "main"'),
+      expect.stringContaining('HEAD must exactly match current origin/main'),
+    ]))
+  })
+
+  it('rejects a retry after the tagged commit leaves main history', () => {
+    expect(checkReleaseGitState({
+      ...validGitState,
+      allowMainDescendant: true,
+      headIsOnOriginMain: false,
+      tag: releaseTag,
+    })).toContainEqual(expect.stringContaining('must remain in current origin/main history'))
+  })
+})
+
+describe('readReleaseGitState', () => {
+  it('reads clean local refs and live annotated-tag refs without a shell', () => {
+    const tagObject = 'b'.repeat(40)
+    const runGit = vi.fn((_command, args) => {
+      const key = args.join(' ')
+      const outputs = {
+        'branch --show-current': 'main\n',
+        'ls-remote origin refs/heads/main refs/tags/v0.3.0 refs/tags/v0.3.0^{}': `${releaseCommit}\trefs/heads/main\n${tagObject}\trefs/tags/v0.3.0\n${releaseCommit}\trefs/tags/v0.3.0^{}\n`,
+        'merge-base --is-ancestor HEAD origin/main': '',
+        'remote get-url origin': 'https://github.com/JosephAnson/verific.git\n',
+        'rev-parse --verify refs/tags/v0.3.0^{commit}': `${releaseCommit}\n`,
+        'rev-parse HEAD': `${releaseCommit}\n`,
+        'rev-parse origin/main': `${releaseCommit}\n`,
+        'status --porcelain=v1 --untracked-files=all': '',
+      }
+      return outputs[key]
     })
 
-    expect(isHeadOnOriginMain(runGit)).toBe(false)
-  })
-
-  it('fails clearly for unexpected Git errors', () => {
-    const runGit = vi.fn(() => {
-      throw Object.assign(new Error('Git failed'), {
-        status: 128,
-        stderr: Buffer.from('fatal: ambiguous argument origin/main'),
+    expect(readReleaseGitState(releaseTag, runGit)).toEqual(validGitState)
+    for (const call of runGit.mock.calls) {
+      expect(call[0]).toBe('git')
+      expect(call[2]).toEqual({
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
       })
+    }
+  })
+
+  it('supports lightweight remote tags', () => {
+    const runGit = vi.fn((_command, args) => {
+      const key = args.join(' ')
+      if (key.startsWith('ls-remote '))
+        return `${releaseCommit}\trefs/heads/main\n${releaseCommit}\trefs/tags/v0.3.0\n`
+      if (key === 'branch --show-current')
+        return 'main\n'
+      if (key === 'remote get-url origin')
+        return 'https://github.com/JosephAnson/verific.git\n'
+      if (key === 'status --porcelain=v1 --untracked-files=all')
+        return ''
+      return `${releaseCommit}\n`
     })
 
-    expect(() => isHeadOnOriginMain(runGit)).toThrowError(
-      'git merge-base --is-ancestor HEAD origin/main failed unexpectedly: fatal: ambiguous argument origin/main',
-    )
+    expect(readReleaseGitState(releaseTag, runGit).remoteTagCommit).toBe(releaseCommit)
+  })
+
+  it('represents an absent local tag without weakening other checks', () => {
+    const runGit = vi.fn((_command, args) => {
+      const key = args.join(' ')
+      if (key === 'rev-parse --verify refs/tags/v0.3.0^{commit}') {
+        throw Object.assign(new Error('missing tag'), {
+          status: 128,
+          stderr: Buffer.from('fatal: Needed a single revision'),
+        })
+      }
+      if (key.startsWith('ls-remote '))
+        return `${releaseCommit}\trefs/heads/main\n`
+      if (key === 'branch --show-current')
+        return 'main\n'
+      if (key === 'remote get-url origin')
+        return 'https://github.com/JosephAnson/verific.git\n'
+      if (key === 'status --porcelain=v1 --untracked-files=all')
+        return ''
+      return `${releaseCommit}\n`
+    })
+
+    expect(readReleaseGitState(releaseTag, runGit)).toMatchObject({
+      localTagCommit: undefined,
+      remoteTagCommit: undefined,
+    })
+  })
+})
+
+describe('isCanonicalOriginUrl', () => {
+  it.each([
+    'https://github.com/JosephAnson/verific.git',
+    'git@github.com:JosephAnson/verific.git',
+    'ssh://git@github.com/JosephAnson/verific',
+  ])('accepts canonical GitHub remote %s', (url) => {
+    expect(isCanonicalOriginUrl(url)).toBe(true)
+  })
+
+  it.each([
+    'https://github.com/example/verific.git',
+    'https://example.com/JosephAnson/verific.git',
+    'git@github.example:JosephAnson/verific.git',
+  ])('rejects non-canonical remote %s', (url) => {
+    expect(isCanonicalOriginUrl(url)).toBe(false)
   })
 })
 
@@ -250,28 +366,27 @@ describe('release manifests', () => {
     const manifests = await readReleaseManifests(repositoryRoot)
     const publicPackageManifests = manifests.packageManifests.filter(({ manifest }) => manifest.private !== true)
 
-    expect(publicPackageManifests.map(({ manifest }) => manifest.name)).toEqual([
-      '@verific/core',
-      '@verific/i18n',
-      '@verific/i18next',
-      '@verific/nuxt',
-      '@verific/paraglide',
-      '@verific/vue-i18n',
-    ])
+    expect(publicPackageManifests.map(({ manifest }) => manifest.name)).toEqual(expectedPublicPackageNames)
+    const repositoryVersion = manifests.rootManifest.manifest.version
+
     expect(checkReleaseVersions(manifests)).toEqual({
       publicPackageCount: 6,
-      version: releaseVersion,
+      tag: `v${repositoryVersion}`,
+      version: repositoryVersion,
     })
 
     for (const { manifest } of [manifests.rootManifest, ...publicPackageManifests]) {
-      expect(manifest.version).toBe(releaseVersion)
+      expect(manifest.version).toBe(repositoryVersion)
       expect(manifest.repository?.url).toBe('git+https://github.com/JosephAnson/verific.git')
     }
 
+    const scripts = manifests.rootManifest.manifest.scripts
     expect(manifests.rootManifest.manifest.devDependencies.changelogen).toBeUndefined()
-    expect(manifests.rootManifest.manifest.scripts.release).toBeTypeOf('string')
-    expect(manifests.rootManifest.manifest.scripts['publish:ci']).toMatch(/^pnpm release:check --publish &&/)
-    expect(manifests.rootManifest.manifest.scripts['release:check']).toBe('node scripts/check-release-version.mjs')
+    expect(scripts.release).toContain('--no-commit --no-tag --no-push')
+    expect(scripts.release).toContain('--ignore-scripts')
+    expect(scripts['release:publish']).toBe('node scripts/publish-release.mjs')
+    expect(scripts['publish:ci']).toBeUndefined()
+    expect(scripts['release:check']).toBe('node scripts/check-release-version.mjs')
     for (const { manifest } of publicPackageManifests)
       expect(manifest.scripts?.release).toBeUndefined()
   })
