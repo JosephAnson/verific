@@ -135,10 +135,46 @@ describe('checkPublishWorkflow', () => {
 
   it('rejects moving the version guard after publication', () => {
     const guard = '      - name: Verify release version\n        run: pnpm release:check --publish'
+    const build = '      - name: Build packages\n        run: pnpm build'
     const publish = `      - name: Publish packages\n        run: pnpm -r --filter "./packages/**" publish --access public --no-git-checks --provenance`
-    const workflow = replaceOnce(validWorkflow, `${guard}\n\n${publish}`, `${publish}\n\n${guard}`)
+    const workflow = replaceOnce(
+      validWorkflow,
+      `${guard}\n\n${build}\n\n${publish}`,
+      `${build}\n\n${publish}\n\n${guard}`,
+    )
 
     expectFailure(workflow, 'must run `pnpm release:check --publish` before publication')
+  })
+
+  it('requires explicit package preparation before publication', () => {
+    const build = '      - name: Build packages\n        run: pnpm build\n\n'
+    const workflow = replaceOnce(validWorkflow, build, '')
+
+    expectFailure(workflow, 'publish-npm must build every package before publication')
+  })
+
+  it('rejects moving package preparation after publication', () => {
+    const build = '      - name: Build packages\n        run: pnpm build'
+    const publish = `      - name: Publish packages\n        run: pnpm -r --filter "./packages/**" publish --access public --no-git-checks --provenance`
+    const workflow = replaceOnce(validWorkflow, `${build}\n\n${publish}`, `${publish}\n\n${build}`)
+
+    expectFailure(workflow, 'publish-npm must build every package before publication')
+  })
+
+  it('rejects dependency caching in the privileged publication job', () => {
+    const workflow = replaceOnce(
+      validWorkflow,
+      '          registry-url: https://registry.npmjs.org/\n          package-manager-cache: false',
+      '          registry-url: https://registry.npmjs.org/\n          cache: pnpm\n          package-manager-cache: false',
+    )
+
+    expectFailure(workflow, 'must explicitly disable package-manager caching')
+  })
+
+  it('requires the explicit package-manager cache disable in the privileged publication job', () => {
+    const workflow = replaceOnce(validWorkflow, '          package-manager-cache: false\n', '')
+
+    expectFailure(workflow, 'must explicitly disable package-manager caching')
   })
 
   it('requires publication to cover every package workspace', () => {

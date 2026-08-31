@@ -53,10 +53,11 @@ const publishSteps = [
   actionStep('Set up Node.js', actions.node, {
     'node-version-file': '.node-version',
     'registry-url': 'https://registry.npmjs.org/',
-    'cache': 'pnpm',
-  }),
+    'package-manager-cache': 'false',
+  }, 'publish-npm setup-node inputs must explicitly disable package-manager caching with `package-manager-cache: false` and must not enable `cache`.'),
   runStep('Install dependencies', 'pnpm install --frozen-lockfile', 'publish-npm must perform a frozen dependency install.'),
   runStep('Verify release version', 'pnpm release:check --publish', 'publish-npm must run `pnpm release:check --publish` before publication.'),
+  runStep('Build packages', 'pnpm build', 'publish-npm must build every package before publication.'),
   runStep('Publish packages', publishCommand, 'publish-npm must publish every package under packages/** with explicit provenance.'),
 ]
 
@@ -304,9 +305,9 @@ function validateActionStep(jobId, index, step, expectedStep, problems) {
     step.with,
     expectedStep.with,
     `${label} inputs`,
-    expectedStep.action.name === actions.checkout.name
+    expectedStep.inputProblem ?? (expectedStep.action.name === actions.checkout.name
       ? `${label} must set checkout inputs exactly, including persist-credentials: false.`
-      : `${label} must use only the audited setup inputs.`,
+      : `${label} must use only the audited setup inputs.`),
     problems,
   )
 }
@@ -404,8 +405,8 @@ function isActionStep(step) {
   return step.kind === 'action'
 }
 
-function actionStep(name, action, withInputs) {
-  return { action, kind: 'action', name, with: withInputs }
+function actionStep(name, action, withInputs, inputProblem) {
+  return { action, inputProblem, kind: 'action', name, with: withInputs }
 }
 
 function runStep(name, command, problem) {
