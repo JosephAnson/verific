@@ -288,7 +288,7 @@ function validateActionStep(jobId, index, step, expectedStep, problems) {
   expectScalar(step.name, expectedStep.name, `${label} must be named ${JSON.stringify(expectedStep.name)}.`, problems)
 
   const reference = scalarValue(step.uses)
-  if (typeof reference !== 'string' || !/^[^@\s]+@[0-9a-f]{40}$/.test(reference)) {
+  if (typeof reference !== 'string' || !/^[^@ ]+@[0-9a-f]{40}$/u.test(reference)) {
     problems.push(`${label} must pin ${expectedStep.action.name} to a full 40-character commit SHA.`)
   }
   else if (reference !== expectedStep.action.reference) {
@@ -419,13 +419,13 @@ function checkRawSafetyRules(source, problems) {
     .map(line => splitYamlComment(line).content)
     .join('\n')
 
-  if (/^\s*(?:shell|'shell'|"shell")\s*:/mu.test(uncommentedSource))
+  if (/^ *(?:shell|'shell'|"shell") *:/mu.test(uncommentedSource))
     problems.push('Custom `shell:` overrides are forbidden, whether their values are quoted or unquoted.')
 
-  if (/^\s*(?:continue-on-error|'continue-on-error'|"continue-on-error")\s*:/mu.test(uncommentedSource))
+  if (/^ *(?:continue-on-error|'continue-on-error'|"continue-on-error") *:/mu.test(uncommentedSource))
     problems.push('`continue-on-error` is forbidden because release failures must remain visible.')
 
-  if (/^\s*(?:if|'if'|"if")\s*:/mu.test(uncommentedSource))
+  if (/^ *(?:if|'if'|"if") *:/mu.test(uncommentedSource))
     problems.push('Conditional job or step execution is forbidden in the release workflow.')
 
   if (/\b(?:NODE_AUTH_TOKEN|NPM_TOKEN)\b|_authToken|npm-token/iu.test(uncommentedSource))
@@ -452,14 +452,23 @@ function tokeniseYaml(source) {
     if (rawLine.includes('\t'))
       throw new Error(`line ${index + 1} contains a tab`)
 
-    const firstContentIndex = rawLine.search(/\S/u)
-    if (firstContentIndex === -1)
+    const unsupportedCodePoint = findUnsupportedYamlWhitespaceOrControl(rawLine)
+    if (unsupportedCodePoint !== undefined) {
+      const codePoint = unsupportedCodePoint.toString(16).toUpperCase().padStart(4, '0')
+      throw new Error(`line ${index + 1} contains unsupported whitespace or control character U+${codePoint}`)
+    }
+
+    let firstContentIndex = 0
+    while (rawLine[firstContentIndex] === ' ')
+      firstContentIndex += 1
+
+    if (firstContentIndex === rawLine.length)
       continue
     if (firstContentIndex % 2 !== 0)
       throw new Error(`line ${index + 1} must use two-space indentation`)
 
     const split = splitYamlComment(rawLine.slice(firstContentIndex))
-    const content = split.content.trimEnd()
+    const content = split.content.replace(/ +$/u, '')
     if (content.length === 0)
       continue
 
@@ -471,6 +480,27 @@ function tokeniseYaml(source) {
     })
   }
   return records
+}
+
+function findUnsupportedYamlWhitespaceOrControl(value) {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0)
+    if (
+      codePoint <= 0x001F
+      || (codePoint >= 0x007F && codePoint <= 0x009F)
+      || codePoint === 0x00A0
+      || codePoint === 0x1680
+      || (codePoint >= 0x2000 && codePoint <= 0x200A)
+      || codePoint === 0x2028
+      || codePoint === 0x2029
+      || codePoint === 0x202F
+      || codePoint === 0x205F
+      || codePoint === 0x3000
+      || codePoint === 0xFEFF
+    ) {
+      return codePoint
+    }
+  }
 }
 
 function splitYamlComment(value) {
@@ -509,9 +539,9 @@ function splitYamlComment(value) {
       continue
     }
 
-    if (character === '#' && (index === 0 || /\s/u.test(value[index - 1]))) {
+    if (character === '#' && (index === 0 || value[index - 1] === ' ')) {
       return {
-        comment: value.slice(index + 1).trim(),
+        comment: value.slice(index + 1).replace(/^ +/u, '').replace(/ +$/u, ''),
         content: value.slice(0, index),
       }
     }
@@ -643,7 +673,7 @@ function tryParseMappingEntry(content) {
   if (!/^[\w-]+$/u.test(key) || (remainder.length > 0 && !remainder.startsWith(' ')))
     return undefined
 
-  return { key, rawValue: remainder.trimStart() }
+  return { key, rawValue: remainder.replace(/^ +/u, '') }
 }
 
 function parseInlineValue(rawValue, record) {

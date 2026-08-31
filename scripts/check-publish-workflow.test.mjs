@@ -7,6 +7,24 @@ import { checkPublishWorkflow } from './check-publish-workflow.mjs'
 const workflowPath = resolve(process.cwd(), '.github/workflows/publish.yml')
 const validWorkflow = await readFile(workflowPath, 'utf8')
 const githubTokenExpression = githubExpression('secrets.GITHUB_TOKEN')
+const releaseRunLine = '        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --repo "$GITHUB_REPOSITORY"'
+const unsupportedYamlWhitespace = [
+  0x000B,
+  0x000C,
+  0x0085,
+  0x00A0,
+  0x1680,
+  ...Array.from({ length: 0x0B }, (_, index) => 0x2000 + index),
+  0x2028,
+  0x2029,
+  0x202F,
+  0x205F,
+  0x3000,
+  0xFEFF,
+].map(codePoint => [
+  `U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}`,
+  String.fromCodePoint(codePoint),
+])
 
 describe('checkPublishWorkflow', () => {
   it('accepts the checked-in least-privilege publication workflow', () => {
@@ -293,6 +311,54 @@ describe('checkPublishWorkflow', () => {
     )
 
     expectFailure(workflow, 'only the exact audited `gh release create` command')
+  })
+
+  it.each(unsupportedYamlWhitespace)(
+    'rejects %s before a comment marker after an exact command',
+    (codePoint, character) => {
+      const workflow = replaceOnce(
+        validWorkflow,
+        releaseRunLine,
+        `${releaseRunLine}${character}# harmless comment`,
+      )
+
+      expectFailure(workflow, `unsupported whitespace or control character ${codePoint}`)
+    },
+  )
+
+  it.each(unsupportedYamlWhitespace)(
+    'rejects trailing %s on an exact command scalar',
+    (codePoint, character) => {
+      const workflow = replaceOnce(validWorkflow, releaseRunLine, `${releaseRunLine}${character}`)
+
+      expectFailure(workflow, `unsupported whitespace or control character ${codePoint}`)
+    },
+  )
+
+  it.each(unsupportedYamlWhitespace)(
+    'rejects %s used for indentation',
+    (codePoint, character) => {
+      const workflow = replaceOnce(
+        validWorkflow,
+        releaseRunLine,
+        `       ${character}${releaseRunLine.slice(8)}`,
+      )
+
+      expectFailure(workflow, `unsupported whitespace or control character ${codePoint}`)
+    },
+  )
+
+  it('preserves ordinary UTF-8 non-whitespace content in comments', () => {
+    const workflow = replaceOnce(
+      validWorkflow,
+      releaseRunLine,
+      `${releaseRunLine} # harmless café 東京 🚀`,
+    )
+
+    expect(checkPublishWorkflow(workflow)).toEqual({
+      actionCount: 6,
+      jobCount: 3,
+    })
   })
 
   it('rejects any extra command in the release job', () => {
