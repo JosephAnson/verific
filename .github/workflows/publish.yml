@@ -1,43 +1,87 @@
 name: Publish Package
 
-permissions:
-  id-token: write
-  contents: write
+permissions: {}
 
 on:
   push:
     tags:
-      - v*
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+concurrency:
+  group: publish-release
+  queue: max
+  cancel-in-progress: false
 
 jobs:
-  publish-npm:
+  verify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Install pnpm
-        uses: pnpm/setup@v1
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
         with:
           install: false
 
-      - uses: actions/setup-node@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check
+        run: pnpm check
+
+  publish-npm:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        with:
+          install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version-file: .node-version
           registry-url: https://registry.npmjs.org/
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
-        continue-on-error: true
+      - name: Verify release version
+        run: pnpm release:check --publish
+
+      - name: Publish packages
+        run: pnpm -r --filter "./packages/**" publish --access public --no-git-checks --provenance
+
+  create-release:
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --repo "$GITHUB_REPOSITORY"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - run: pnpm run publish:ci
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
-          NPM_CONFIG_PROVENANCE: true
-          NODE_OPTIONS: --max-old-space-size=6144
