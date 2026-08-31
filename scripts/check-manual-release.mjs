@@ -27,10 +27,12 @@ const githubReleaseCommandPattern = /\bgh\s+release\s+create\b/i
 const githubReleaseActionPattern = /actions\/create-release|softprops\/action-gh-release|\bchangelogithub\b/i
 const npmCredentialPattern = /\b(?:NPM_TOKEN|NPM_AUTH_TOKEN|NODE_AUTH_TOKEN|NPM_CONFIG_OTP|YARN_NPM_AUTH_TOKEN)\b/
 const npmRegistryPattern = /https:\/\/registry\.npmjs\.org/i
-const workflowSecretPattern = /\bsecrets(?:\.([A-Za-z_]\w*)|\[['"]([A-Za-z_]\w*)['"]\])/g
+const workflowExpressionPattern = /\$\{\{([\s\S]*?)\}\}/g
 const dollar = '$'
 const workflowExpression = value => `${dollar}{{ ${value} }}`
+const ciWorkflowPath = '.github/workflows/ci.yml'
 const deployWorkflowPath = '.github/workflows/deploy.yml'
+const deployConcurrencyGroup = 'deploy-main-v2'
 const workflowActions = {
   buildPush: 'docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a',
   checkout: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
@@ -48,40 +50,41 @@ const dockerPublicationSecrets = new Set([
   'DOCKERHUB_DEPLOY_TOKEN_V2',
   'DOCKERHUB_DEPLOY_USERNAME_V2',
 ])
-const allowedWorkflowSecrets = dockerPublicationSecrets
-const verifySuccessfulCiCommand = [
-  'set -euo pipefail',
-  'ci_run_count="$(gh api',
-  '--method GET',
-  '--header \'Accept: application/vnd.github+json\'',
-  '--header \'X-GitHub-Api-Version: 2026-03-10\'',
-  `"/repos/${dollar}{GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha=${dollar}{GITHUB_SHA}&per_page=1"`,
-  '--jq \'.workflow_runs | length\')"',
-  'if [[ "$ci_run_count" -eq 0 ]]; then',
-  `echo "::error::No successful push-triggered CI run found for ${dollar}{GITHUB_SHA}"`,
-  'exit 1',
-  'fi',
-].join(' ')
-const promoteCurrentMainCommand = [
-  'set -euo pipefail',
-  'current_sha="$(gh api',
-  '--method GET',
-  '--header \'Accept: application/vnd.github+json\'',
-  '--header \'X-GitHub-Api-Version: 2026-03-10\'',
-  `"/repos/${dollar}{GITHUB_REPOSITORY}/git/ref/heads/main"`,
-  '--jq \'.object.sha\')"',
-  'if [[ "$current_sha" != "$EXPECTED_SHA" ]]; then',
-  `echo "::notice::Skipping latest promotion because ${dollar}{EXPECTED_SHA} is no longer the main tip"`,
-  'exit 0',
-  'fi',
-  'if [[ -z "$DIGEST" ]]; then',
-  'echo "::error::Docker build did not return a digest"',
-  'exit 1',
-  'fi',
-  'docker buildx imagetools create',
-  `--tag "${dollar}{IMAGE}:latest"`,
-  `"${dollar}{IMAGE}@${dollar}{DIGEST}"`,
-].join(' ')
+const verifySuccessfulCiCommand = `set -euo pipefail
+
+ci_run_count="$(gh api \\
+  --method GET \\
+  --header 'Accept: application/vnd.github+json' \\
+  --header 'X-GitHub-Api-Version: 2026-03-10' \\
+  "/repos/${dollar}{GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha=${dollar}{GITHUB_SHA}&per_page=1" \\
+  --jq '.workflow_runs | length')"
+
+if [[ "$ci_run_count" -eq 0 ]]; then
+  echo "::error::No successful push-triggered CI run found for ${dollar}{GITHUB_SHA}"
+  exit 1
+fi`
+const promoteCurrentMainCommand = `set -euo pipefail
+
+current_sha="$(gh api \\
+  --method GET \\
+  --header 'Accept: application/vnd.github+json' \\
+  --header 'X-GitHub-Api-Version: 2026-03-10' \\
+  "/repos/${dollar}{GITHUB_REPOSITORY}/git/ref/heads/main" \\
+  --jq '.object.sha')"
+
+if [[ "$current_sha" != "$EXPECTED_SHA" ]]; then
+  echo "::notice::Skipping latest promotion because ${dollar}{EXPECTED_SHA} is no longer the main tip"
+  exit 0
+fi
+
+if [[ -z "$DIGEST" ]]; then
+  echo "::error::Docker build did not return a digest"
+  exit 1
+fi
+
+docker buildx imagetools create \\
+  --tag "${dollar}{IMAGE}:latest" \\
+  "${dollar}{IMAGE}@${dollar}{DIGEST}"`
 const manualDeploySteps = [
   {
     env: { GH_TOKEN: workflowExpression('github.token') },
@@ -134,6 +137,94 @@ const manualDeployConcurrency = {
 }
 const manualDeployPermissions = { actions: 'read', contents: 'read' }
 const manualDeployTrigger = { workflow_dispatch: null }
+const allowedDeploySecretScalars = new Set([
+  workflowExpression('secrets.DOCKERHUB_DEPLOY_TOKEN_V2'),
+  workflowExpression('secrets.DOCKERHUB_DEPLOY_USERNAME_V2'),
+  `${workflowExpression('secrets.DOCKERHUB_DEPLOY_USERNAME_V2')}/verific`,
+  `${workflowExpression('secrets.DOCKERHUB_DEPLOY_USERNAME_V2')}/verific:${workflowExpression('github.sha')}`,
+])
+const ciCheckoutStep = {
+  uses: workflowActions.checkout,
+  with: { 'persist-credentials': false },
+}
+const ciPnpmStep = {
+  uses: workflowActions.pnpm,
+  with: { install: false },
+}
+const ciSetupNodeStep = {
+  uses: workflowActions.setupNode,
+  with: { 'cache': 'pnpm', 'node-version-file': '.node-version' },
+}
+const ciInstallStep = { name: 'Install', run: 'pnpm install --frozen-lockfile' }
+const trustedCiWorkflow = {
+  concurrency: {
+    'cancel-in-progress': true,
+    'group': `${workflowExpression('github.workflow')}-${workflowExpression('github.ref')}`,
+  },
+  jobs: {
+    'documentation-browser': {
+      'name': 'Documentation browser smoke',
+      'runs-on': 'ubuntu-latest',
+      'steps': [
+        ciCheckoutStep,
+        ciPnpmStep,
+        ciSetupNodeStep,
+        ciInstallStep,
+        {
+          name: 'Install Chromium',
+          run: 'pnpm --dir playgrounds/docs exec playwright install --with-deps chromium',
+        },
+        {
+          name: 'Check browser-only documentation behaviour',
+          run: 'pnpm --dir playgrounds/docs test:browser',
+        },
+      ],
+      'timeout-minutes': 15,
+    },
+    'node-compatibility': {
+      'name': `Node ${workflowExpression('matrix.node-version')}`,
+      'runs-on': 'ubuntu-latest',
+      'steps': [
+        ciCheckoutStep,
+        ciPnpmStep,
+        {
+          uses: workflowActions.setupNode,
+          with: {
+            'cache': 'pnpm',
+            'node-version': workflowExpression('matrix.node-version'),
+          },
+        },
+        ciInstallStep,
+        {
+          name: 'Check Node compatibility',
+          run: 'pnpm build && pnpm packages:typecheck && pnpm test',
+        },
+      ],
+      'strategy': {
+        'fail-fast': false,
+        'matrix': { 'node-version': ['22.22.2', '24.15.0', '26.0.0'] },
+      },
+      'timeout-minutes': 15,
+    },
+    'quality': {
+      'runs-on': 'ubuntu-latest',
+      'steps': [
+        ciCheckoutStep,
+        ciPnpmStep,
+        ciSetupNodeStep,
+        ciInstallStep,
+        { name: 'Check', run: 'pnpm check' },
+      ],
+      'timeout-minutes': 30,
+    },
+  },
+  name: 'CI',
+  on: {
+    pull_request: { branches: ['main'] },
+    push: { branches: ['main'] },
+  },
+  permissions: { contents: 'read' },
+}
 const allowedWorkflowActionSteps = new Set([
   { uses: workflowActions.checkout, with: { 'persist-credentials': false } },
   { uses: workflowActions.pnpm, with: { install: false } },
@@ -165,7 +256,7 @@ const allowedWorkflowRunStepValues = [
   ...manualDeploySteps.filter(step => step.run),
 ]
 const allowedWorkflowCommands = new Set(
-  allowedWorkflowRunStepValues.map(({ run }) => normaliseCommand(run)),
+  allowedWorkflowRunStepValues.map(({ run }) => normaliseScanCommand(run)),
 )
 const allowedWorkflowRunSteps = new Set(allowedWorkflowRunStepValues.map(serialiseWorkflowStep))
 const allowedRootReleaseScriptNames = new Set([
@@ -242,6 +333,7 @@ export async function readManualReleasePolicyInputs(repositoryRoot) {
 function checkWorkflow(problems, workflow) {
   const descriptions = new Set()
   const report = description => descriptions.add(description)
+  const isCiWorkflow = workflow.path === ciWorkflowPath
   const isDeployWorkflow = workflow.path === deployWorkflowPath
 
   if (basename(workflow.path) === 'publish.yml' || basename(workflow.path) === 'publish.yaml')
@@ -273,6 +365,11 @@ function checkWorkflow(problems, workflow) {
 
   if (isDeployWorkflow)
     checkManualDeployWorkflow(document, report)
+  if (isCiWorkflow && !hasExactWorkflowValue(document, trustedCiWorkflow))
+    report('a trusted CI workflow outside the exact required contract')
+
+  checkWorkflowConcurrency(document, report, { isCiWorkflow, isDeployWorkflow })
+  checkJobPermissionOverrides(document, report)
 
   inspectWorkflowValue(document, undefined, report, {
     allowDockerPublication: isDeployWorkflow,
@@ -283,6 +380,10 @@ function checkWorkflow(problems, workflow) {
 }
 
 function checkManualDeployWorkflow(document, report) {
+  const rootKeys = Object.keys(document).sort()
+  if (!hasExactWorkflowValue(rootKeys, ['jobs', 'name', 'on', 'permissions']))
+    report('an unapproved Docker workflow-level configuration')
+
   if (!hasExactWorkflowValue(document.on, manualDeployTrigger))
     report('a deploy trigger other than workflow_dispatch only')
 
@@ -322,6 +423,36 @@ function checkManualDeployWorkflow(document, report) {
     report('Docker deploy steps other than the exact approved sequence')
 }
 
+function checkWorkflowConcurrency(document, report, { isCiWorkflow, isDeployWorkflow }) {
+  const jobs = isRecord(document.jobs) ? Object.values(document.jobs) : []
+  const concurrencyValues = [
+    document.concurrency,
+    ...jobs
+      .filter(isRecord)
+      .map(job => job.concurrency),
+  ].filter(value => value !== undefined)
+
+  if (!isDeployWorkflow && concurrencyValues.some(usesReservedDeployConcurrencyGroup))
+    report(`the reserved ${deployConcurrencyGroup} Docker deployment concurrency group`)
+
+  if (!isCiWorkflow && !isDeployWorkflow && concurrencyValues.length > 0)
+    report('unapproved workflow concurrency')
+}
+
+function checkJobPermissionOverrides(document, report) {
+  if (!isRecord(document.jobs))
+    return
+
+  if (Object.values(document.jobs).some(job => isRecord(job) && 'permissions' in job))
+    report('a job-level permission override')
+}
+
+function usesReservedDeployConcurrencyGroup(value) {
+  return isRecord(value)
+    && typeof value.group === 'string'
+    && value.group.trim().toLowerCase() === deployConcurrencyGroup
+}
+
 function inspectWorkflowValue(value, key, report, context) {
   if (typeof value === 'string') {
     if (npmCredentialPattern.test(value))
@@ -330,13 +461,7 @@ function inspectWorkflowValue(value, key, report, context) {
     if (npmRegistryPattern.test(value))
       report('npm registry publication setup')
 
-    for (const match of value.matchAll(workflowSecretPattern)) {
-      const secretName = match[1] ?? match[2]
-      if (!allowedWorkflowSecrets.has(secretName))
-        report('an unapproved workflow secret')
-      else if (!context.allowDockerPublication)
-        report(`Docker publication capability outside ${deployWorkflowPath}`)
-    }
+    inspectWorkflowSecretContexts(value, key, report, context)
 
     if (key === 'run')
       inspectRunCommand(value, report, context)
@@ -374,9 +499,11 @@ function inspectWorkflowValue(value, key, report, context) {
   for (const [childKey, childValue] of Object.entries(value)) {
     if (npmCredentialPattern.test(childKey))
       report('an npm publication credential')
-    if (dockerPublicationSecrets.has(childKey) && !context.allowDockerPublication)
+    if (isDockerPublicationSecret(childKey) && !context.allowDockerPublication)
       report(`Docker publication capability outside ${deployWorkflowPath}`)
 
+    if (childKey === 'credentials' && isRecord(childValue))
+      report('unapproved job container or service credentials')
     if (childKey === 'permissions' && childValue === 'write-all') {
       report('release-capable repository permission')
       report('publication OIDC permission')
@@ -394,12 +521,46 @@ function inspectWorkflowValue(value, key, report, context) {
   }
 }
 
+function inspectWorkflowSecretContexts(source, key, report, context) {
+  const expressions = Array.from(
+    source.matchAll(workflowExpressionPattern),
+    match => match[1],
+  )
+
+  if (key === 'if' && expressions.length === 0)
+    expressions.push(source)
+
+  const secretExpressions = expressions.filter(expression => /\bsecrets\b/i.test(expression))
+  if (secretExpressions.length === 0)
+    return
+
+  if (!context.allowDockerPublication || !allowedDeploySecretScalars.has(source))
+    report('an unapproved workflow secret')
+
+  if (
+    !context.allowDockerPublication
+    && secretExpressions.some(expression => Array.from(dockerPublicationSecrets)
+      .some(secret => new RegExp(`\\b${secret}\\b`, 'i').test(expression)))
+  ) {
+    report(`Docker publication capability outside ${deployWorkflowPath}`)
+  }
+}
+
+function isDockerPublicationSecret(value) {
+  return Array.from(dockerPublicationSecrets)
+    .some(secret => secret.toLowerCase() === value.toLowerCase())
+}
+
 function inspectRunCommand(source, report, context) {
-  const command = normaliseCommand(source)
+  const command = normaliseScanCommand(source)
   const approved = allowedWorkflowCommands.has(command)
 
-  if (command === promoteCurrentMainCommand && !context.allowDockerPublication)
+  if (
+    command === normaliseScanCommand(promoteCurrentMainCommand)
+    && !context.allowDockerPublication
+  ) {
     report(`Docker publication capability outside ${deployWorkflowPath}`)
+  }
 
   if (publicationCommandPattern.test(command))
     report('an npm publication command')
@@ -422,7 +583,7 @@ function checkManifestScripts(problems, manifestPath, scripts, { allowPublicatio
     if (allowPublicationEntry && name === 'release:publish')
       continue
 
-    const normalisedCommand = normaliseCommand(String(command))
+    const normalisedCommand = normaliseScanCommand(String(command))
     if (
       publicationCommandPattern.test(normalisedCommand)
       || publicationEntryPattern.test(normalisedCommand)
@@ -443,11 +604,17 @@ function checkManifestScripts(problems, manifestPath, scripts, { allowPublicatio
   }
 }
 
-function normaliseCommand(source) {
+function normaliseScanCommand(source) {
   return source
     .replace(/\\\r?\n[\t ]*/g, '')
     .replace(/[\t\r\n ]+/g, ' ')
     .trim()
+}
+
+function normaliseExactRun(source) {
+  return source
+    .replace(/\r\n/g, '\n')
+    .replace(/\n$/, '')
 }
 
 function isRecord(value) {
@@ -468,7 +635,7 @@ function serialiseWorkflowStep(step) {
 
 function normaliseWorkflowValue(value, key) {
   if (typeof value === 'string')
-    return key === 'run' ? normaliseCommand(value) : value
+    return key === 'run' ? normaliseExactRun(value) : value
 
   if (Array.isArray(value))
     return value.map(child => normaliseWorkflowValue(child))

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import process from 'node:process'
 import { describe, expect, it } from 'vitest'
 import {
@@ -16,7 +17,7 @@ const rootManifest = {
 }
 
 const safeWorkflow = {
-  path: '.github/workflows/ci.yml',
+  path: '.github/workflows/safe.yml',
   source: `
 name: CI
 permissions:
@@ -28,6 +29,10 @@ jobs:
       - name: Check
         run: pnpm check
 `,
+}
+const trustedCiWorkflow = {
+  path: '.github/workflows/ci.yml',
+  source: await readFile('.github/workflows/ci.yml', 'utf8'),
 }
 
 const dollar = '$'
@@ -147,6 +152,16 @@ ${formatWorkflowStep(step)}
 `
 }
 
+function replaceDockerStep(step, replacement) {
+  return {
+    ...manualDockerWorkflow,
+    source: manualDockerWorkflow.source.replace(
+      formatWorkflowStep(step),
+      formatWorkflowStep(replacement),
+    ),
+  }
+}
+
 describe('checkManualReleasePolicy', () => {
   it('accepts workflows that cannot mutate npm or GitHub Releases', () => {
     expect(checkManualReleasePolicy({ rootManifest, workflows: [safeWorkflow] })).toEqual([])
@@ -155,7 +170,7 @@ describe('checkManualReleasePolicy', () => {
   it('accepts the exact guarded manual Docker workflow', () => {
     expect(checkManualReleasePolicy({
       rootManifest,
-      workflows: [safeWorkflow, manualDockerWorkflow],
+      workflows: [trustedCiWorkflow, manualDockerWorkflow],
     })).toEqual([])
   })
 
@@ -201,6 +216,53 @@ describe('checkManualReleasePolicy', () => {
     )
   })
 
+  it('preserves statement boundaries in both Docker shell guards', () => {
+    const joinedPreflightGuard = replaceDockerStep(
+      manualDockerPreflightStep,
+      manualDockerPreflightStep.replace(
+        `    echo "::error::No successful push-triggered CI run found for ${dollar}{GITHUB_SHA}"
+    exit 1`,
+        `    echo "::error::No successful push-triggered CI run found for ${dollar}{GITHUB_SHA}" exit 1`,
+      ),
+    )
+    const joinedPromotionGuard = replaceDockerStep(
+      manualDockerPromotionStep,
+      manualDockerPromotionStep.replace(
+        `    echo "::notice::Skipping latest promotion because ${dollar}{EXPECTED_SHA} is no longer the main tip"
+    exit 0`,
+        `    echo "::notice::Skipping latest promotion because ${dollar}{EXPECTED_SHA} is no longer the main tip" exit 0`,
+      ),
+    )
+
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [joinedPreflightGuard],
+    })).toContain(
+      '.github/workflows/deploy.yml contains no exact successful push CI preflight before Docker publication.',
+    )
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [joinedPromotionGuard],
+    })).toContain(
+      '.github/workflows/deploy.yml contains Docker deploy steps other than the exact approved sequence.',
+    )
+  })
+
+  it('accepts CRLF and either default or stripped block chomping', () => {
+    const crlfWorkflow = {
+      ...manualDockerWorkflow,
+      source: manualDockerWorkflow.source.replaceAll('\n', '\r\n'),
+    }
+    const strippedWorkflow = {
+      ...manualDockerWorkflow,
+      source: manualDockerWorkflow.source.replaceAll('run: |', 'run: |-'),
+    }
+
+    for (const workflow of [crlfWorkflow, strippedWorkflow]) {
+      expect(checkManualReleasePolicy({ rootManifest, workflows: [workflow] })).toEqual([])
+    }
+  })
+
   it.each([
     `name: Read DockerHub username
 run: pnpm check
@@ -221,6 +283,53 @@ env:
     )
   })
 
+  it.each([
+    `${dollar}{{ secrets [ 'DOCKERHUB_DEPLOY_TOKEN_V2' ] }}`,
+    `${dollar}{{ Secrets.DOCKERHUB_DEPLOY_TOKEN_V2 }}`,
+    `${dollar}{{ toJSON(secrets) }}`,
+  ])('rejects every secret-context access outside the deploy workflow %#', (secretValue) => {
+    const source = workflowWithStep(`name: Read secret context
+run: pnpm check
+env:
+  TOKEN: ${secretValue}`)
+
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [{ path: '.github/workflows/unsafe.yml', source }],
+    })).toContain('.github/workflows/unsafe.yml contains an unapproved workflow secret.')
+  })
+
+  it.each([
+    `    container:
+      image: registry.example.test/build:latest
+      credentials:
+        username: collector
+        password: ${dollar}{{ secrets [ 'DOCKERHUB_DEPLOY_TOKEN_V2' ] }}
+`,
+    `    services:
+      registry:
+        image: registry.example.test/service:latest
+        credentials:
+          username: collector
+          password: ${dollar}{{ toJSON(secrets) }}
+`,
+  ])('rejects job container and service credentials %#', (jobConfiguration) => {
+    const source = safeWorkflow.source.replace(
+      '    runs-on: ubuntu-latest\n',
+      `    runs-on: ubuntu-latest
+${jobConfiguration}`,
+    )
+    const problems = checkManualReleasePolicy({
+      rootManifest,
+      workflows: [{ path: '.github/workflows/unsafe.yml', source }],
+    })
+
+    expect(problems).toContain(
+      '.github/workflows/unsafe.yml contains unapproved job container or service credentials.',
+    )
+    expect(problems).toContain('.github/workflows/unsafe.yml contains an unapproved workflow secret.')
+  })
+
   it('requires explicit read-only workflow permissions', () => {
     const missingPermissions = safeWorkflow.source.replace(/permissions:\n {2}contents: read\n/, '')
 
@@ -228,8 +337,81 @@ env:
       rootManifest,
       workflows: [{ ...safeWorkflow, source: missingPermissions }],
     })).toContain(
-      '.github/workflows/ci.yml contains permissions other than explicit read-only contents access.',
+      '.github/workflows/safe.yml contains permissions other than explicit read-only contents access.',
     )
+  })
+
+  it.each([
+    trustedCiWorkflow.source.replace(
+      '  quality:\n',
+      `  quality:
+    if: ${dollar}{{ false }}
+`,
+    ),
+    trustedCiWorkflow.source.replace(
+      '      - name: Check\n        run: pnpm check',
+      '      - name: Check\n        continue-on-error: true\n        run: pnpm check',
+    ),
+    trustedCiWorkflow.source.replace(
+      /\n {2}quality:[\s\S]*?\n {2}documentation-browser:/,
+      '\n  documentation-browser:',
+    ),
+  ])('rejects a skipped, softened or incomplete trusted CI graph %#', (source) => {
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [{ ...trustedCiWorkflow, source }],
+    })).toContain(
+      '.github/workflows/ci.yml contains a trusted CI workflow outside the exact required contract.',
+    )
+  })
+
+  it.each(['actions', 'packages'])('rejects job-level %s write permissions', (scope) => {
+    const source = safeWorkflow.source.replace(
+      '  check:\n',
+      `  check:
+    permissions:
+      ${scope}: write
+`,
+    )
+
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [{ ...safeWorkflow, source }],
+    })).toContain('.github/workflows/safe.yml contains a job-level permission override.')
+  })
+
+  it('rejects root deploy concurrency and reserves its group across workflows', () => {
+    const rootConcurrency = manualDockerWorkflow.source.replace(
+      'permissions:\n',
+      `concurrency:
+  group: deploy-main-v2
+  cancel-in-progress: true
+
+permissions:
+`,
+    )
+    const foreignConcurrency = safeWorkflow.source.replace(
+      '  check:\n',
+      `  check:
+    concurrency:
+      group: DEPLOY-MAIN-V2
+      cancel-in-progress: true
+`,
+    )
+
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [{ ...manualDockerWorkflow, source: rootConcurrency }],
+    })).toContain(
+      '.github/workflows/deploy.yml contains an unapproved Docker workflow-level configuration.',
+    )
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [{ ...safeWorkflow, source: foreignConcurrency }],
+    })).toEqual(expect.arrayContaining([
+      '.github/workflows/safe.yml contains the reserved deploy-main-v2 Docker deployment concurrency group.',
+      '.github/workflows/safe.yml contains unapproved workflow concurrency.',
+    ]))
   })
 
   it('rejects inherited workflow environments and bracket secret references', () => {
@@ -245,8 +427,8 @@ permissions:`,
       workflows: [{ ...safeWorkflow, source }],
     })
 
-    expect(problems).toContain('.github/workflows/ci.yml contains an unapproved workflow environment.')
-    expect(problems).toContain('.github/workflows/ci.yml contains an unapproved workflow secret.')
+    expect(problems).toContain('.github/workflows/safe.yml contains an unapproved workflow environment.')
+    expect(problems).toContain('.github/workflows/safe.yml contains an unapproved workflow secret.')
   })
 
   it.each([
@@ -436,7 +618,7 @@ env:
         ...safeWorkflow,
         source: workflowWithStep('run: gh api --method GET repos/example/project/git/ref/heads/main'),
       }],
-    })).toContain('.github/workflows/ci.yml contains an unapproved workflow command.')
+    })).toContain('.github/workflows/safe.yml contains an unapproved workflow command.')
   })
 
   it('fails closed for malformed or ambiguous workflow YAML', () => {
