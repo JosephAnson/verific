@@ -30,9 +30,111 @@ jobs:
 `,
 }
 
-function workflowWithStep(step) {
-  const indentedStep = step.trim().split('\n').map((line, index) => `${index === 0 ? '      - ' : '        '}${line}`).join('\n')
+const dollar = '$'
+const manualDockerPreflightStep = `name: Verify successful CI for selected commit
+env:
+  GH_TOKEN: ${dollar}{{ github.token }}
+run: |
+  set -euo pipefail
 
+  ci_run_count="$(gh api \\
+    --method GET \\
+    --header 'Accept: application/vnd.github+json' \\
+    --header 'X-GitHub-Api-Version: 2026-03-10' \\
+    "/repos/${dollar}{GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha=${dollar}{GITHUB_SHA}&per_page=1" \\
+    --jq '.workflow_runs | length')"
+
+  if [[ "$ci_run_count" -eq 0 ]]; then
+    echo "::error::No successful push-triggered CI run found for ${dollar}{GITHUB_SHA}"
+    exit 1
+  fi`
+const manualDockerCheckoutStep = `uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+with:
+  ref: ${dollar}{{ github.sha }}
+  persist-credentials: false`
+const manualDockerBuildxStep = `name: Set up Docker Buildx
+uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f`
+const manualDockerLoginStep = `name: Login to DockerHub
+uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+with:
+  username: ${dollar}{{ secrets.DOCKERHUB_DEPLOY_USERNAME_V2 }}
+  password: ${dollar}{{ secrets.DOCKERHUB_DEPLOY_TOKEN_V2 }}`
+const manualDockerBuildPushStep = `name: Build and push
+id: docker_build
+uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+with:
+  context: .
+  push: true
+  tags: ${dollar}{{ secrets.DOCKERHUB_DEPLOY_USERNAME_V2 }}/verific:${dollar}{{ github.sha }}
+  sbom: true`
+const manualDockerPromotionStep = `name: Promote current main digest to latest
+env:
+  DIGEST: ${dollar}{{ steps.docker_build.outputs.digest }}
+  EXPECTED_SHA: ${dollar}{{ github.sha }}
+  GH_TOKEN: ${dollar}{{ github.token }}
+  IMAGE: ${dollar}{{ secrets.DOCKERHUB_DEPLOY_USERNAME_V2 }}/verific
+run: |
+  set -euo pipefail
+
+  current_sha="$(gh api \\
+    --method GET \\
+    --header 'Accept: application/vnd.github+json' \\
+    --header 'X-GitHub-Api-Version: 2026-03-10' \\
+    "/repos/${dollar}{GITHUB_REPOSITORY}/git/ref/heads/main" \\
+    --jq '.object.sha')"
+
+  if [[ "$current_sha" != "$EXPECTED_SHA" ]]; then
+    echo "::notice::Skipping latest promotion because ${dollar}{EXPECTED_SHA} is no longer the main tip"
+    exit 0
+  fi
+
+  if [[ -z "$DIGEST" ]]; then
+    echo "::error::Docker build did not return a digest"
+    exit 1
+  fi
+
+  docker buildx imagetools create \\
+    --tag "${dollar}{IMAGE}:latest" \\
+    "${dollar}{IMAGE}@${dollar}{DIGEST}"`
+const manualDockerSteps = [
+  manualDockerPreflightStep,
+  manualDockerCheckoutStep,
+  manualDockerBuildxStep,
+  manualDockerLoginStep,
+  manualDockerBuildPushStep,
+  manualDockerPromotionStep,
+]
+const manualDockerWorkflow = {
+  path: '.github/workflows/deploy.yml',
+  source: `
+name: Docker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build:
+    if: ${dollar}{{ github.ref == 'refs/heads/main' }}
+    concurrency:
+      group: deploy-main-v2
+      queue: max
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+${manualDockerSteps.map(formatWorkflowStep).join('\n')}
+`,
+}
+
+function formatWorkflowStep(step) {
+  return step.trim().split('\n').map((line, index) => `${index === 0 ? '      - ' : '        '}${line}`).join('\n')
+}
+
+function workflowWithStep(step) {
   return `
 name: Unsafe
 permissions:
@@ -41,13 +143,82 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-${indentedStep}
+${formatWorkflowStep(step)}
 `
 }
 
 describe('checkManualReleasePolicy', () => {
   it('accepts workflows that cannot mutate npm or GitHub Releases', () => {
     expect(checkManualReleasePolicy({ rootManifest, workflows: [safeWorkflow] })).toEqual([])
+  })
+
+  it('accepts the exact guarded manual Docker workflow', () => {
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [safeWorkflow, manualDockerWorkflow],
+    })).toEqual([])
+  })
+
+  it.each([
+    'push:\n    branches: [main]',
+    'push:\n    tags: [\'v*\']',
+    'workflow_run:\n    workflows: [CI]\n    types: [completed]',
+    'schedule:\n    - cron: \'0 4 * * *\'',
+    'repository_dispatch:',
+    'release:\n    types: [published]',
+  ])('rejects an automatic Docker trigger %#', (trigger) => {
+    const source = manualDockerWorkflow.source.replace('workflow_dispatch:', trigger)
+
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [{ ...manualDockerWorkflow, source }],
+    })).toContain(
+      '.github/workflows/deploy.yml contains a deploy trigger other than workflow_dispatch only.',
+    )
+  })
+
+  it('rejects missing main and successful-push CI guards', () => {
+    const withoutMainGuard = manualDockerWorkflow.source.replace(
+      `    if: ${dollar}{{ github.ref == 'refs/heads/main' }}\n`,
+      '',
+    )
+    const withoutCiPreflight = manualDockerWorkflow.source.replace(
+      `${formatWorkflowStep(manualDockerPreflightStep)}\n`,
+      '',
+    )
+
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [{ ...manualDockerWorkflow, source: withoutMainGuard }],
+    })).toContain(
+      '.github/workflows/deploy.yml contains a Docker publish job without the exact refs/heads/main guard.',
+    )
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [{ ...manualDockerWorkflow, source: withoutCiPreflight }],
+    })).toContain(
+      '.github/workflows/deploy.yml contains no exact successful push CI preflight before Docker publication.',
+    )
+  })
+
+  it.each([
+    `name: Read DockerHub username
+run: pnpm check
+env:
+  DOCKER_USER: ${dollar}{{ secrets.DOCKERHUB_DEPLOY_USERNAME_V2 }}`,
+    manualDockerLoginStep,
+    manualDockerBuildPushStep,
+    manualDockerPromotionStep,
+  ])('rejects Docker publication capability in another workflow %#', (step) => {
+    expect(checkManualReleasePolicy({
+      rootManifest,
+      workflows: [{
+        path: '.github/workflows/unsafe.yml',
+        source: workflowWithStep(step),
+      }],
+    })).toContain(
+      '.github/workflows/unsafe.yml contains Docker publication capability outside .github/workflows/deploy.yml.',
+    )
   })
 
   it('requires explicit read-only workflow permissions', () => {

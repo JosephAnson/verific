@@ -30,6 +30,7 @@ const npmRegistryPattern = /https:\/\/registry\.npmjs\.org/i
 const workflowSecretPattern = /\bsecrets(?:\.([A-Za-z_]\w*)|\[['"]([A-Za-z_]\w*)['"]\])/g
 const dollar = '$'
 const workflowExpression = value => `${dollar}{{ ${value} }}`
+const deployWorkflowPath = '.github/workflows/deploy.yml'
 const workflowActions = {
   buildPush: 'docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a',
   checkout: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
@@ -39,10 +40,28 @@ const workflowActions = {
   setupNode: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020',
 }
 const allowedWorkflowActions = new Set(Object.values(workflowActions))
-const allowedWorkflowSecrets = new Set([
+const dockerPublicationActions = new Set([
+  workflowActions.buildPush,
+  workflowActions.dockerLogin,
+])
+const dockerPublicationSecrets = new Set([
   'DOCKERHUB_DEPLOY_TOKEN_V2',
   'DOCKERHUB_DEPLOY_USERNAME_V2',
 ])
+const allowedWorkflowSecrets = dockerPublicationSecrets
+const verifySuccessfulCiCommand = [
+  'set -euo pipefail',
+  'ci_run_count="$(gh api',
+  '--method GET',
+  '--header \'Accept: application/vnd.github+json\'',
+  '--header \'X-GitHub-Api-Version: 2026-03-10\'',
+  `"/repos/${dollar}{GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha=${dollar}{GITHUB_SHA}&per_page=1"`,
+  '--jq \'.workflow_runs | length\')"',
+  'if [[ "$ci_run_count" -eq 0 ]]; then',
+  `echo "::error::No successful push-triggered CI run found for ${dollar}{GITHUB_SHA}"`,
+  'exit 1',
+  'fi',
+].join(' ')
 const promoteCurrentMainCommand = [
   'set -euo pipefail',
   'current_sha="$(gh api',
@@ -63,23 +82,18 @@ const promoteCurrentMainCommand = [
   `--tag "${dollar}{IMAGE}:latest"`,
   `"${dollar}{IMAGE}@${dollar}{DIGEST}"`,
 ].join(' ')
-const allowedWorkflowActionSteps = new Set([
-  { uses: workflowActions.checkout, with: { 'persist-credentials': false } },
+const manualDeploySteps = [
+  {
+    env: { GH_TOKEN: workflowExpression('github.token') },
+    name: 'Verify successful CI for selected commit',
+    run: verifySuccessfulCiCommand,
+  },
   {
     uses: workflowActions.checkout,
     with: {
       'persist-credentials': false,
-      'ref': workflowExpression('github.event.workflow_run.head_sha'),
+      'ref': workflowExpression('github.sha'),
     },
-  },
-  { uses: workflowActions.pnpm, with: { install: false } },
-  {
-    uses: workflowActions.setupNode,
-    with: { 'cache': 'pnpm', 'node-version-file': '.node-version' },
-  },
-  {
-    uses: workflowActions.setupNode,
-    with: { 'cache': 'pnpm', 'node-version': workflowExpression('matrix.node-version') },
   },
   { name: 'Set up Docker Buildx', uses: workflowActions.setupBuildx },
   {
@@ -98,9 +112,40 @@ const allowedWorkflowActionSteps = new Set([
       context: '.',
       push: true,
       sbom: true,
-      tags: `${workflowExpression('secrets.DOCKERHUB_DEPLOY_USERNAME_V2')}/verific:${workflowExpression('github.event.workflow_run.head_sha')}`,
+      tags: `${workflowExpression('secrets.DOCKERHUB_DEPLOY_USERNAME_V2')}/verific:${workflowExpression('github.sha')}`,
     },
   },
+  {
+    env: {
+      DIGEST: workflowExpression('steps.docker_build.outputs.digest'),
+      EXPECTED_SHA: workflowExpression('github.sha'),
+      GH_TOKEN: workflowExpression('github.token'),
+      IMAGE: `${workflowExpression('secrets.DOCKERHUB_DEPLOY_USERNAME_V2')}/verific`,
+    },
+    name: 'Promote current main digest to latest',
+    run: promoteCurrentMainCommand,
+  },
+]
+const manualDeployJobCondition = workflowExpression('github.ref == \'refs/heads/main\'')
+const manualDeployConcurrency = {
+  'cancel-in-progress': false,
+  'group': 'deploy-main-v2',
+  'queue': 'max',
+}
+const manualDeployPermissions = { actions: 'read', contents: 'read' }
+const manualDeployTrigger = { workflow_dispatch: null }
+const allowedWorkflowActionSteps = new Set([
+  { uses: workflowActions.checkout, with: { 'persist-credentials': false } },
+  { uses: workflowActions.pnpm, with: { install: false } },
+  {
+    uses: workflowActions.setupNode,
+    with: { 'cache': 'pnpm', 'node-version-file': '.node-version' },
+  },
+  {
+    uses: workflowActions.setupNode,
+    with: { 'cache': 'pnpm', 'node-version': workflowExpression('matrix.node-version') },
+  },
+  ...manualDeploySteps.filter(step => step.uses),
 ].map(serialiseWorkflowStep))
 const allowedWorkflowRunStepValues = [
   { name: 'Install', run: 'pnpm install --frozen-lockfile' },
@@ -117,16 +162,7 @@ const allowedWorkflowRunStepValues = [
     name: 'Check Node compatibility',
     run: 'pnpm build && pnpm packages:typecheck && pnpm test',
   },
-  {
-    env: {
-      DIGEST: workflowExpression('steps.docker_build.outputs.digest'),
-      EXPECTED_SHA: workflowExpression('github.event.workflow_run.head_sha'),
-      GH_TOKEN: workflowExpression('github.token'),
-      IMAGE: `${workflowExpression('secrets.DOCKERHUB_DEPLOY_USERNAME_V2')}/verific`,
-    },
-    name: 'Promote current main digest to latest',
-    run: promoteCurrentMainCommand,
-  },
+  ...manualDeploySteps.filter(step => step.run),
 ]
 const allowedWorkflowCommands = new Set(
   allowedWorkflowRunStepValues.map(({ run }) => normaliseCommand(run)),
@@ -206,6 +242,7 @@ export async function readManualReleasePolicyInputs(repositoryRoot) {
 function checkWorkflow(problems, workflow) {
   const descriptions = new Set()
   const report = description => descriptions.add(description)
+  const isDeployWorkflow = workflow.path === deployWorkflowPath
 
   if (basename(workflow.path) === 'publish.yml' || basename(workflow.path) === 'publish.yaml')
     problems.push(`${workflow.path} must not exist in the manual release design.`)
@@ -224,16 +261,68 @@ function checkWorkflow(problems, workflow) {
     return
   }
 
-  if (!hasExplicitReadOnlyPermissions(document.permissions))
-    report('permissions other than explicit read-only contents access')
+  const expectedPermissions = isDeployWorkflow
+    ? manualDeployPermissions
+    : { contents: 'read' }
 
-  inspectWorkflowValue(document, undefined, report)
+  if (!hasExplicitReadOnlyPermissions(document.permissions, expectedPermissions)) {
+    report(isDeployWorkflow
+      ? 'Docker publish permissions other than explicit read-only actions and contents access'
+      : 'permissions other than explicit read-only contents access')
+  }
+
+  if (isDeployWorkflow)
+    checkManualDeployWorkflow(document, report)
+
+  inspectWorkflowValue(document, undefined, report, {
+    allowDockerPublication: isDeployWorkflow,
+  })
 
   for (const description of descriptions)
     problems.push(`${workflow.path} contains ${description}.`)
 }
 
-function inspectWorkflowValue(value, key, report) {
+function checkManualDeployWorkflow(document, report) {
+  if (!hasExactWorkflowValue(document.on, manualDeployTrigger))
+    report('a deploy trigger other than workflow_dispatch only')
+
+  const jobNames = isRecord(document.jobs) ? Object.keys(document.jobs).sort() : []
+  if (!hasExactWorkflowValue(jobNames, ['build']))
+    report('Docker jobs other than the single approved build job')
+
+  const buildJob = isRecord(document.jobs) && isRecord(document.jobs.build)
+    ? document.jobs.build
+    : undefined
+
+  if (!buildJob) {
+    report('no approved Docker build job')
+    return
+  }
+
+  if (buildJob.if !== manualDeployJobCondition)
+    report('a Docker publish job without the exact refs/heads/main guard')
+
+  if (!hasExactWorkflowValue(buildJob.concurrency, manualDeployConcurrency)) {
+    report('Docker deployment concurrency other than the approved non-cancelling queue')
+  }
+
+  const jobKeys = Object.keys(buildJob).sort()
+  const approvedJobKeys = ['concurrency', 'if', 'runs-on', 'steps', 'timeout-minutes']
+  if (!hasExactWorkflowValue(jobKeys, approvedJobKeys))
+    report('an unapproved Docker publish job configuration')
+
+  if (buildJob['runs-on'] !== 'ubuntu-latest' || buildJob['timeout-minutes'] !== 45)
+    report('a Docker publish runner or timeout other than the approved values')
+
+  const steps = Array.isArray(buildJob.steps) ? buildJob.steps : []
+  if (!hasExactWorkflowValue(steps[0], manualDeploySteps[0]))
+    report('no exact successful push CI preflight before Docker publication')
+
+  if (!hasExactWorkflowValue(steps, manualDeploySteps))
+    report('Docker deploy steps other than the exact approved sequence')
+}
+
+function inspectWorkflowValue(value, key, report, context) {
   if (typeof value === 'string') {
     if (npmCredentialPattern.test(value))
       report('an npm publication credential')
@@ -245,16 +334,20 @@ function inspectWorkflowValue(value, key, report) {
       const secretName = match[1] ?? match[2]
       if (!allowedWorkflowSecrets.has(secretName))
         report('an unapproved workflow secret')
+      else if (!context.allowDockerPublication)
+        report(`Docker publication capability outside ${deployWorkflowPath}`)
     }
 
     if (key === 'run')
-      inspectRunCommand(value, report)
+      inspectRunCommand(value, report, context)
 
     if (key === 'uses') {
       if (githubReleaseActionPattern.test(value))
         report('GitHub Release creation')
       if (!allowedWorkflowActions.has(value))
         report('an unapproved workflow action')
+      if (dockerPublicationActions.has(value) && !context.allowDockerPublication)
+        report(`Docker publication capability outside ${deployWorkflowPath}`)
     }
 
     return
@@ -262,7 +355,7 @@ function inspectWorkflowValue(value, key, report) {
 
   if (Array.isArray(value)) {
     for (const child of value)
-      inspectWorkflowValue(child, key, report)
+      inspectWorkflowValue(child, key, report, context)
     return
   }
 
@@ -281,6 +374,8 @@ function inspectWorkflowValue(value, key, report) {
   for (const [childKey, childValue] of Object.entries(value)) {
     if (npmCredentialPattern.test(childKey))
       report('an npm publication credential')
+    if (dockerPublicationSecrets.has(childKey) && !context.allowDockerPublication)
+      report(`Docker publication capability outside ${deployWorkflowPath}`)
 
     if (childKey === 'permissions' && childValue === 'write-all') {
       report('release-capable repository permission')
@@ -295,13 +390,16 @@ function inspectWorkflowValue(value, key, report) {
     if (childKey === 'working-directory')
       report('an unapproved workflow working directory')
 
-    inspectWorkflowValue(childValue, childKey, report)
+    inspectWorkflowValue(childValue, childKey, report, context)
   }
 }
 
-function inspectRunCommand(source, report) {
+function inspectRunCommand(source, report, context) {
   const command = normaliseCommand(source)
   const approved = allowedWorkflowCommands.has(command)
+
+  if (command === promoteCurrentMainCommand && !context.allowDockerPublication)
+    report(`Docker publication capability outside ${deployWorkflowPath}`)
 
   if (publicationCommandPattern.test(command))
     report('an npm publication command')
@@ -356,10 +454,12 @@ function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function hasExplicitReadOnlyPermissions(value) {
-  return isRecord(value)
-    && Object.keys(value).length === 1
-    && value.contents === 'read'
+function hasExplicitReadOnlyPermissions(value, expected) {
+  return hasExactWorkflowValue(value, expected)
+}
+
+function hasExactWorkflowValue(value, expected) {
+  return serialiseWorkflowStep(value) === serialiseWorkflowStep(expected)
 }
 
 function serialiseWorkflowStep(step) {
@@ -402,7 +502,7 @@ async function main() {
       )
     }
 
-    console.log(`Manual release policy check passed: ${inputs.workflows.length} workflows cannot publish npm packages or create GitHub Releases.`)
+    console.log(`Manual publication policy check passed: ${inputs.workflows.length} workflows cannot publish npm packages, create GitHub Releases or publish Docker images automatically.`)
   }
   catch (error) {
     console.error(error instanceof Error ? error.message : error)

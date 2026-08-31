@@ -119,6 +119,30 @@ gh release create v0.3.0 \
 
 If this command fails, retry it without republishing. GitHub Releases are the canonical public release history.
 
+### Publishing Docker images
+
+Docker image publication is a separate maintainer action. Pushes to `main`, tags and successful CI runs do not publish images, and Docker publication does not gate npm publication or GitHub Release creation.
+
+Before dispatching, authenticate `gh` as a maintainer, confirm the selected `main` commit has a successful push-triggered `CI` run, and configure these repository Actions secrets:
+
+- `DOCKERHUB_DEPLOY_USERNAME_V2`: the Docker Hub account that owns the `verific` repository.
+- `DOCKERHUB_DEPLOY_TOKEN_V2`: a Docker Hub access token authorised to push to that repository.
+
+Start the dedicated workflow explicitly from `main`:
+
+```bash
+gh workflow run deploy.yml --ref main
+```
+
+Find the new manual run and watch it to completion:
+
+```bash
+gh run list --workflow deploy.yml --event workflow_dispatch --branch main --limit 5
+gh run watch <run-id> --exit-status
+```
+
+The workflow fails before Docker login unless the exact selected commit has a successful push-triggered `CI` run. It publishes the immutable commit-SHA tag and promotes that digest to `latest` only while the same SHA remains the live `main` tip.
+
 ## Commits and pull requests
 
 Use conventional commit messages with a concise subject. Pull requests should explain the problem, the chosen behaviour and how it was verified. Link a minimal reproduction when fixing a consumer-facing bug.
