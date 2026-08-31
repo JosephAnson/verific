@@ -68,6 +68,19 @@ describe('checkPublishWorkflow', () => {
     expectFailure(replaceOnce(validWorkflow, original, replacement), message)
   })
 
+  it.each([
+    ['single quotes', '\'false\''],
+    ['double quotes', '"false"'],
+  ])('rejects cancel-in-progress false written with %s', (_case, value) => {
+    const workflow = replaceOnce(
+      validWorkflow,
+      '  cancel-in-progress: false',
+      `  cancel-in-progress: ${value}`,
+    )
+
+    expectFailure(workflow, 'exact unquoted YAML Boolean')
+  })
+
   it('rejects publication that does not depend directly on verification', () => {
     const workflow = replaceOnce(
       validWorkflow,
@@ -233,6 +246,19 @@ describe('checkPublishWorkflow', () => {
     )
 
     expectFailure(workflow, 'including persist-credentials: false')
+  })
+
+  it.each(['\'false\'', '"false"'])('accepts quoted %s for string-valued Action inputs', (value) => {
+    const workflow = replaceOnce(
+      validWorkflow,
+      '          persist-credentials: false',
+      `          persist-credentials: ${value}`,
+    )
+
+    expect(checkPublishWorkflow(workflow)).toEqual({
+      actionCount: 6,
+      jobCount: 3,
+    })
   })
 
   it('rejects a mutable Action reference', () => {

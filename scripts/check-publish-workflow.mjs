@@ -161,12 +161,16 @@ function validateConcurrency(value, problems) {
     problems.push('Release concurrency must use a fixed, non-expression group name.')
 
   expectScalar(concurrency.queue, 'max', 'Release concurrency must set `queue: max`.', problems)
-  expectScalar(
-    concurrency['cancel-in-progress'],
-    'false',
-    'Release concurrency must set `cancel-in-progress: false` so an active release is never cancelled.',
-    problems,
-  )
+  const cancelInProgress = concurrency['cancel-in-progress']
+  if (
+    !isScalar(cancelInProgress)
+    || cancelInProgress.style !== 'plain'
+    || cancelInProgress.value !== 'false'
+  ) {
+    problems.push(
+      'Release concurrency must set `cancel-in-progress: false` as the exact unquoted YAML Boolean so an active release is never cancelled.',
+    )
+  }
 }
 
 function validateJobs(value, problems) {
@@ -682,14 +686,17 @@ function parseInlineValue(rawValue, record) {
   if (rawValue === '[]')
     return []
 
+  let style = 'plain'
   let value = rawValue
   if (rawValue.startsWith(singleQuote)) {
     if (!rawValue.endsWith(singleQuote) || rawValue.length < 2)
       throw new Error(`line ${record.line} has an unterminated single-quoted scalar`)
+    style = 'single-quoted'
     value = rawValue.slice(1, -1).replaceAll(singleQuote.repeat(2), singleQuote)
   }
   else if (rawValue.startsWith('"')) {
     try {
+      style = 'double-quoted'
       value = JSON.parse(rawValue)
     }
     catch {
@@ -700,6 +707,7 @@ function parseInlineValue(rawValue, record) {
   return {
     comment: record.comment,
     line: record.line,
+    style,
     type: 'scalar',
     value,
   }
