@@ -1,7 +1,7 @@
 {
   "name": "@verific/vue-i18n",
   "type": "commonjs",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Vue I18n message adapter for Verific",
   "author": {
     "name": "Joseph Anson",
