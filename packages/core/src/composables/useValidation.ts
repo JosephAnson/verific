@@ -2,11 +2,12 @@ import type { StandardSchemaV1 } from '@standard-schema/spec'
 import type { ComputedRef, InjectionKey, MaybeRef, ShallowRef } from 'vue'
 import type { IssueNormaliser, MessageResolver, ValidationIssue } from '../messages'
 import type { InternalValidationScope } from '../validation/scope'
-import { computed, getCurrentInstance, getCurrentScope, inject, onScopeDispose, provide } from 'vue'
+import { computed, getCurrentInstance, getCurrentScope, inject, onScopeDispose, provide, unref } from 'vue'
 import { VERIFIC_SYMBOL } from '../utils/constants'
 import { unwrapSchema } from '../utils/schemaUtils'
 import { resolveValidationMessage } from '../validation/issuePipeline'
 import { pathsEqual, selectorSegments } from '../validation/paths'
+import { snapshotValidationData, structurallyEqual } from '../validation/registrationObservation'
 import { createValidationScope } from '../validation/scope'
 
 export type ValidationFields<Schema extends StandardSchemaV1> = {
@@ -50,6 +51,28 @@ export interface TargetValidationResult {
   readonly issues: readonly ValidationIssue[]
 }
 
+export type ValidationTrigger = 'blur' | 'change' | 'input' | 'submit'
+
+export interface ValidationBindingOptions {
+  readonly trigger?: ValidationTrigger
+  readonly debounce?: number
+  readonly describedBy?: string
+}
+
+export interface ValidationBindings {
+  readonly 'aria-invalid': boolean
+  readonly 'aria-describedby': string | undefined
+  readonly 'onBlur'?: () => Promise<TargetValidationResult>
+  readonly 'onChange'?: () => Promise<TargetValidationResult>
+  readonly 'onInput'?: () => Promise<TargetValidationResult>
+}
+
+export interface ValidationGroupBindings {
+  readonly 'aria-invalid': boolean
+  readonly 'aria-describedby': string | undefined
+  readonly 'onChange': () => Promise<TargetValidationResult>
+}
+
 export type RegistrationResult<Output>
   = | { readonly status: 'idle' }
     | { readonly status: 'valid', readonly value: Output }
@@ -83,6 +106,9 @@ export interface ValidationController<Schema extends StandardSchemaV1>
   extends ValidationGroup<ValidationPath<Schema>> {
   readonly ownIssues: ComputedRef<readonly ValidationIssue[]>
   readonly result: Readonly<ShallowRef<RegistrationResult<StandardSchemaV1.InferOutput<Schema>>>>
+  commit: (path: ValidationPath<Schema>, options?: Pick<ValidationBindingOptions, 'debounce'>) => Promise<TargetValidationResult>
+  on: (path: ValidationPath<Schema>, options?: ValidationBindingOptions) => ValidationBindings
+  group: (path: ValidationPath<Schema>, options?: Pick<ValidationBindingOptions, 'debounce' | 'describedBy'>) => ValidationGroupBindings
 }
 
 const localScopes = new WeakMap<object, InternalValidationScope>()
@@ -131,12 +157,133 @@ export function useValidation<Schema extends StandardSchemaV1>(
   const group = createGroup<ValidationPath<Schema>>(scope, groupPrefix)
   const result = computed(() => registration.readResult() as RegistrationResult<StandardSchemaV1.InferOutput<Schema>>)
   const ownIssues = computed(registration.readIssues)
+  const bindings = createBindings(group, model as ValidationData<Schema>)
+
+  if (getCurrentScope()) {
+    onScopeDispose(bindings.dispose)
+  }
 
   return {
     ...group,
     ownIssues,
     result: result as unknown as Readonly<ShallowRef<RegistrationResult<StandardSchemaV1.InferOutput<Schema>>>>,
+    commit: bindings.commit,
+    on: bindings.on,
+    group: bindings.group,
   }
+}
+
+interface CommitRecord {
+  readonly path: readonly PropertyKey[]
+  value: unknown
+  pending?: Promise<TargetValidationResult>
+  timer?: ReturnType<typeof setTimeout>
+  resolve?: (result: TargetValidationResult) => void
+  reject?: (reason: unknown) => void
+}
+
+function createBindings<Path>(group: ValidationGroup<Path>, model: unknown) {
+  const records: CommitRecord[] = []
+
+  function readValue(path: Path): unknown {
+    let value = unref(model)
+    for (const segment of selectorSegments(path)) {
+      value = unref(value)
+      if ((typeof value !== 'object' && typeof value !== 'function') || value === null || !Object.hasOwn(value, segment))
+        return undefined
+      value = Reflect.get(value, segment)
+    }
+    return snapshotValidationData(unref(value))
+  }
+
+  function recordFor(path: Path): CommitRecord {
+    const segments = [...selectorSegments(path)]
+    let record = records.find(candidate => pathsEqual(candidate.path, segments))
+    if (!record) {
+      record = { path: Object.freeze(segments), value: Symbol('uncommitted') }
+      records.push(record)
+    }
+    return record
+  }
+
+  function run(path: Path, record: CommitRecord, value: unknown): Promise<TargetValidationResult> {
+    record.value = value
+    group.touch(path)
+    const pending = group.validateAt(path)
+    record.pending = pending
+    void pending.finally(() => {
+      if (record.pending === pending)
+        record.pending = undefined
+    }).catch(() => {})
+    return pending
+  }
+
+  function commit(path: Path, options: Pick<ValidationBindingOptions, 'debounce'> = {}): Promise<TargetValidationResult> {
+    const record = recordFor(path)
+    const value = readValue(path)
+    if (structurallyEqual(record.value, value)) {
+      return record.pending ?? Promise.resolve({ issues: group.issuesFor(path) })
+    }
+
+    if (!options.debounce)
+      return run(path, record, value)
+
+    record.value = value
+    const rescheduling = record.timer !== undefined
+    if (record.timer)
+      clearTimeout(record.timer)
+    const pending = rescheduling && record.pending
+      ? record.pending
+      : new Promise<TargetValidationResult>((resolve, reject) => {
+          record.resolve = resolve
+          record.reject = reject
+        })
+    record.pending = pending
+    record.timer = setTimeout(() => {
+      record.timer = undefined
+      run(path, record, readValue(path)).then(record.resolve, record.reject)
+      record.resolve = undefined
+      record.reject = undefined
+    }, options.debounce)
+    return pending
+  }
+
+  function on(path: Path, options: ValidationBindingOptions = {}): ValidationBindings {
+    const trigger = options.trigger
+    const handler = () => commit(path, options)
+    return {
+      get 'aria-invalid'() { return group.hasError(path) },
+      'aria-describedby': options.describedBy,
+      'onBlur': trigger === undefined || trigger === 'blur' ? handler : undefined,
+      'onChange': trigger === undefined || trigger === 'change' ? handler : undefined,
+      'onInput': trigger === 'input' ? handler : undefined,
+    }
+  }
+
+  function validationGroup(path: Path, options: Pick<ValidationBindingOptions, 'debounce' | 'describedBy'> = {}): ValidationGroupBindings {
+    return {
+      get 'aria-invalid'() { return group.hasError(path) },
+      'aria-describedby': options.describedBy,
+      'onChange': () => commit(path, options),
+    }
+  }
+
+  function dispose(): void {
+    for (const record of records) {
+      if (record.timer) {
+        clearTimeout(record.timer)
+        const reason = new Error('Validation commit was disposed')
+        reason.name = 'AbortError'
+        record.reject?.(reason)
+        record.timer = undefined
+        record.pending = undefined
+        record.resolve = undefined
+        record.reject = undefined
+      }
+    }
+  }
+
+  return { commit, on, group: validationGroup, dispose }
 }
 
 function provideScope(instance: object, options: ValidationScopeOptions): InternalValidationScope {

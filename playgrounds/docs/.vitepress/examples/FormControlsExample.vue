@@ -22,44 +22,21 @@ const interests = ref<string[]>([])
 const readyMessage = 'Submit to validate every field.'
 const validMessage = 'The preferences are valid.'
 const submissionMessage = ref(readyMessage)
-const { errorsFor, hasError, state, touch, validate, validateAt } = useValidation(schema, {
+const { errorsFor, hasError, state, validate, on, group } = useValidation(schema, {
   age,
   country,
   interests,
+})
+const ageBinding = on('age', { describedBy: 'controls-age-errors' })
+const countryBinding = on('country', { describedBy: 'controls-country-errors' })
+const interestsBinding = group('interests', {
+  describedBy: 'controls-interests-requirement controls-interests-errors',
 })
 const visibleSubmissionMessage = computed(() => (
   state.value.stale
     ? 'The preferences changed after validation. Validate again.'
     : submissionMessage.value
 ))
-
-async function onAgeBlur() {
-  submissionMessage.value = readyMessage
-  touch('age')
-  await validateAt('age')
-}
-
-async function onCountryChange(event: Event) {
-  country.value = (event.currentTarget as HTMLSelectElement).value
-  submissionMessage.value = readyMessage
-  touch('country')
-  await validateAt('country')
-}
-
-async function onInterestChange(event: Event) {
-  const control = event.currentTarget as HTMLInputElement
-  const nextInterests = new Set(interests.value)
-
-  if (control.checked)
-    nextInterests.add(control.value)
-  else
-    nextInterests.delete(control.value)
-
-  interests.value = [...nextInterests]
-  submissionMessage.value = readyMessage
-  touch('interests')
-  await validateAt('interests')
-}
 
 async function onSubmit() {
   const result = await validate()
@@ -108,9 +85,10 @@ async function onSubmit() {
             min="18"
             step="1"
             required
-            :aria-invalid="hasError('age')"
+            :aria-invalid="ageBinding['aria-invalid']"
             aria-describedby="controls-age-errors"
-            @blur="onAgeBlur"
+            @blur="ageBinding.onBlur"
+            @change="ageBinding.onChange"
           >
           <ul id="controls-age-errors" class="verific-example__errors" aria-live="polite" aria-atomic="true">
             <li v-for="(error, index) in errorsFor('age')" :key="`${index}:${error}`">
@@ -123,11 +101,12 @@ async function onSubmit() {
           <label for="controls-country">Country</label>
           <select
             id="controls-country"
-            :value="country"
+            v-model="country"
             required
-            :aria-invalid="hasError('country')"
+            :aria-invalid="countryBinding['aria-invalid']"
             aria-describedby="controls-country-errors"
-            @change="onCountryChange"
+            @blur="countryBinding.onBlur"
+            @change="countryBinding.onChange"
           >
             <option value="">
               Choose a country
@@ -150,8 +129,9 @@ async function onSubmit() {
       <fieldset
         class="verific-example__field verific-example__choice-group"
         data-validation-required-group
-        :aria-invalid="hasError('interests')"
+        :aria-invalid="interestsBinding['aria-invalid']"
         aria-describedby="controls-interests-requirement controls-interests-errors"
+        @change="interestsBinding.onChange"
       >
         <legend>Interests (choose at least one — required)</legend>
         <p id="controls-interests-requirement" class="verific-example__hint">
@@ -161,24 +141,22 @@ async function onSubmit() {
           <label class="verific-example__toggle" for="controls-interest-design">
             <input
               id="controls-interest-design"
+              v-model="interests"
               type="checkbox"
               value="design"
-              :checked="interests.includes('design')"
               :aria-invalid="hasError('interests')"
               aria-describedby="controls-interests-requirement controls-interests-errors"
-              @change="onInterestChange"
             >
             Design
           </label>
           <label class="verific-example__toggle" for="controls-interest-testing">
             <input
               id="controls-interest-testing"
+              v-model="interests"
               type="checkbox"
               value="testing"
-              :checked="interests.includes('testing')"
               :aria-invalid="hasError('interests')"
               aria-describedby="controls-interests-requirement controls-interests-errors"
-              @change="onInterestChange"
             >
             Testing
           </label>

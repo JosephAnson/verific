@@ -10,7 +10,7 @@ application-wide message resolution or issue normalisation.
 Most forms begin with the same destructured interface:
 
 ```ts
-const { errorsFor, hasError, touch, validate, validateAt } = useValidation(schema, model)
+const { errorsFor, hasError, on, commit, validate, validateAt } = useValidation(schema, model)
 ```
 
 Use `errorsFor()` and `hasError()` to render one field, call `touch()` then
@@ -74,6 +74,16 @@ actions used by most forms:
 | `touch(path)` | `void` | Record interaction at one exact path. |
 | `validateAt(path)` | `Promise<TargetValidationResult>` | Run complete matching schemas and publish fresh issues only at one exact path. |
 | `validate()` | `Promise<ValidationResult>` | Validate every active registration in the scope. |
+
+Schema-owning controllers also expose ergonomic bindings without taking ownership of model values:
+
+| Member | Type | Meaning |
+| --- | --- | --- |
+| `on(path, options?)` | `ValidationBindings` | Bind blur/change by default, accessibility state, deduplication and optional trigger/debounce policy. |
+| `group(path, options?)` | `ValidationGroupBindings` | Bind one bubbling change handler and fieldset-level accessibility state for grouped controls. |
+| `commit(path, options?)` | `Promise<TargetValidationResult>` | Touch and validate an application-owned value, deduplicating unchanged commits. |
+
+Pass `describedBy` to connect a binding to the application's persistent error or instruction containers. `trigger` accepts `'blur'`, `'change'`, `'input'` or `'submit'`; the default binds both blur and change, while submit adds no event handler. `debounce` is measured in milliseconds.
 
 `TargetValidationResult` contains only a readonly `issues` array. It has no
 submission status or transformed output. `ValidationResult` is returned only by

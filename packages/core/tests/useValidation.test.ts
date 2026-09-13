@@ -107,6 +107,94 @@ describe('useValidation composition', () => {
   })
 })
 
+describe('validation bindings', () => {
+  it('binds blur and change to one value-deduplicated commit', async () => {
+    const validator = vi.fn((value: { email: string }) => value.email
+      ? { value }
+      : { issues: [{ message: 'Email required', path: ['email'] }] })
+    const schema = createSchema<{ email: string }>('test', validator)
+    const email = ref('')
+    const mounted = mountValidation(() => useValidation(schema, { email }), false)
+    const binding = mounted.value.on('email', { describedBy: 'email-errors' })
+
+    binding.onBlur?.()
+    binding.onChange?.()
+    await vi.waitFor(() => expect(validator).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(binding['aria-invalid']).toBe(true))
+
+    expect(binding['aria-describedby']).toBe('email-errors')
+    expect(mounted.value.stateFor('email').touched).toBe(true)
+
+    email.value = 'valid@example.com'
+    binding.onChange?.()
+    await vi.waitFor(() => expect(validator).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(binding['aria-invalid']).toBe(false))
+  })
+
+  it('supports input debouncing and submit-only opt out', async () => {
+    vi.useFakeTimers()
+    const validator = vi.fn((value: { bio: string }) => ({ value }))
+    const schema = createSchema<{ bio: string }>('test', validator)
+    const bio = ref('')
+    const mounted = mountValidation(() => useValidation(schema, { bio }), false)
+    const live = mounted.value.on('bio', { trigger: 'input', debounce: 200 })
+    const submitOnly = mounted.value.on('bio', { trigger: 'submit' })
+
+    expect(live.onBlur).toBeUndefined()
+    expect(live.onChange).toBeUndefined()
+    expect(live.onInput).toBeTypeOf('function')
+    expect(submitOnly.onBlur).toBeUndefined()
+    expect(submitOnly.onChange).toBeUndefined()
+    expect(submitOnly.onInput).toBeUndefined()
+
+    bio.value = 'a'
+    live.onInput?.()
+    bio.value = 'ab'
+    live.onInput?.()
+    await vi.advanceTimersByTimeAsync(199)
+    expect(validator).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    await vi.waitFor(() => expect(validator).toHaveBeenCalledOnce())
+    expect(validator).toHaveBeenCalledWith({ bio: 'ab' })
+    vi.useRealTimers()
+  })
+
+  it('exposes custom commits and group change bindings', async () => {
+    const validator = vi.fn((value: { interests: string[] }) => ({ value }))
+    const schema = createSchema<{ interests: string[] }>('test', validator)
+    const interests = ref<string[]>([])
+    const mounted = mountValidation(() => useValidation(schema, { interests }), false)
+    const binding = mounted.value.group('interests', { describedBy: 'interests-errors' })
+
+    expect(binding['aria-invalid']).toBe(false)
+    interests.value = ['design']
+    binding.onChange()
+    await vi.waitFor(() => expect(validator).toHaveBeenCalledOnce())
+    expect(binding['aria-describedby']).toBe('interests-errors')
+
+    interests.value.push('testing')
+    binding.onChange()
+    await vi.waitFor(() => expect(validator).toHaveBeenCalledTimes(2))
+
+    interests.value.push('accessibility')
+    await mounted.value.commit('interests')
+    expect(validator).toHaveBeenCalledTimes(3)
+  })
+
+  it('cancels a debounced commit when its component is disposed', async () => {
+    vi.useFakeTimers()
+    const schema = createSchema<{ email: string }>('test', value => ({ value }))
+    const mounted = mountValidation(() => useValidation(schema, { email: ref('') }), false)
+    const pending = mounted.value.commit('email', { debounce: 200 })
+    const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+
+    mounted.app.unmount()
+
+    await rejection
+    vi.useRealTimers()
+  })
+})
+
 describe('validation state and paths', () => {
   it('preserves raw issues, normalises paths and selects exact relative paths', async () => {
     const rawParent = { message: 'Address issue', path: [{ key: 'address' }] }

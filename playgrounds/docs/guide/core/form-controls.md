@@ -8,9 +8,24 @@ import FormControlsExample from '../../.vitepress/examples/FormControlsExample.v
 
 # Binding form controls
 
-Verific validates application-owned values; it does not bind DOM elements or choose when a field becomes visible as invalid. Connect each control to a ref or reactive property, update that value, then call the appropriate validation action.
+Verific validates application-owned values; it never owns or returns a control's value. `on(path)` binds validation and accessibility state to a native control while leaving `v-model` in charge of the model:
 
-- After a field interaction, call `touch(path)` and then `validateAt(path)`. Targeted validation runs the complete schema but publishes only issues at that exact path.
+```ts
+const { on } = useValidation(schema, { email })
+const emailBinding = on('email', { describedBy: 'email-errors' })
+```
+
+```vue
+<input v-model="email" type="email" v-bind="emailBinding">
+
+<ul id="email-errors">
+  <!-- render errors here -->
+</ul>
+```
+
+The default binding includes both blur and change handlers. They share one commit and deduplicate the current model value, so text inputs, selects and radios can use the same binding even when a browser fires both events. A commit touches the path before targeted validation.
+
+- Use `commit(path)` for custom controls after assigning their emitted value. It performs the same touch, deduplication and targeted validation as a binding.
 - Use `validate()` for submission. Its full result is the only authority for continuing to the next application step.
 - Prefer blur for text-like values and change for choices, pickers and files. Always update the model before touching and validating its path.
 
@@ -55,54 +70,37 @@ Most form controls reduce to a small set of model shapes and events:
 Text-like fields usually validate on blur so validation does not interrupt typing. Keep an explicit blank state for numeric fields; `v-model.number` leaves an empty number input as `''` rather than inventing zero.
 
 ```ts
-async function onEmailBlur() {
-  touch('email')
-  await validateAt('email')
-}
-
-async function onAgeBlur() {
-  touch('age')
-  await validateAt('age')
-}
-
-async function onVolumeChange() {
-  touch('volume')
-  await validateAt('volume')
-}
+const emailBinding = on('email', { describedBy: 'email-errors' })
+const ageBinding = on('age', { describedBy: 'age-errors' })
+const volumeBinding = on('volume', { describedBy: 'volume-errors' })
 ```
 
 ```vue
-<input v-model="email" type="email" @blur="onEmailBlur">
+<input v-model="email" type="email" v-bind="emailBinding">
 
-<input v-model.number="age" type="number" @blur="onAgeBlur">
+<input v-model.number="age" type="number" v-bind="ageBinding">
 
-<input v-model.number="volume" type="range" @change="onVolumeChange">
+<input v-model.number="volume" type="range" v-bind="volumeBinding">
 ```
 
-If an application deliberately validates while a range thumb moves, use `input` and account for the higher validation frequency.
+If an application deliberately validates while a range thumb moves, use `on('volume', { trigger: 'input', debounce: 200 })`. Use `{ trigger: 'submit' }` to return accessibility bindings without event-driven validation.
 
 ### Radio and multiple selection
 
 Radio buttons behave like one scalar choice. A multiple select behaves like a checkbox group and supplies an array:
 
 ```ts
-async function onDeliveryChange() {
-  touch('delivery')
-  await validateAt('delivery')
-}
-
-async function onTopicsChange() {
-  touch('topics')
-  await validateAt('topics')
-}
+const deliveryBinding = group('delivery', { describedBy: 'delivery-errors' })
+const topicsBinding = on('topics', { describedBy: 'topics-errors' })
 ```
 
 ```vue
-<input v-model="delivery" type="radio" value="standard" @change="onDeliveryChange">
+<fieldset v-bind="deliveryBinding">
+  <input v-model="delivery" type="radio" value="standard">
+  <input v-model="delivery" type="radio" value="express">
+</fieldset>
 
-<input v-model="delivery" type="radio" value="express" @change="onDeliveryChange">
-
-<select v-model="topics" multiple @change="onTopicsChange">
+<select v-model="topics" multiple v-bind="topicsBinding">
   <option value="design">Design</option>
   <option value="testing">Testing</option>
 </select>
@@ -182,8 +180,7 @@ At a custom-control seam, assign the emitted value before targeted validation ra
 ```ts
 async function onRatingChange(value: number) {
   rating.value = value
-  touch('rating')
-  await validateAt('rating')
+  await commit('rating')
 }
 ```
 

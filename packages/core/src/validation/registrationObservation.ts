@@ -547,7 +547,7 @@ function stampsEqual<Registration extends ObservableRegistration>(
   })
 }
 
-function structurallyEqual(
+export function structurallyEqual(
   actual: unknown,
   expected: unknown,
   actualToExpected = new WeakMap<object, object>(),
@@ -631,7 +631,7 @@ function containsAccessor(data: unknown, seen = new WeakSet<object>()): boolean 
   return false
 }
 
-function snapshotValidationData(data: unknown, seen = new WeakMap<object, unknown>()): unknown {
+export function snapshotValidationData(data: unknown, seen = new WeakMap<object, unknown>()): unknown {
   const value = isRef(data) ? unref(data) : data
   if (typeof value !== 'object' || value === null) {
     return value
