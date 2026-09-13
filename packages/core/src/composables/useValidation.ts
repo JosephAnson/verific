@@ -2,12 +2,12 @@ import type { StandardSchemaV1 } from '@standard-schema/spec'
 import type { ComputedRef, InjectionKey, MaybeRef, ShallowRef } from 'vue'
 import type { IssueNormaliser, MessageResolver, ValidationIssue } from '../messages'
 import type { InternalValidationScope } from '../validation/scope'
-import { computed, getCurrentInstance, getCurrentScope, inject, onScopeDispose, provide, unref } from 'vue'
+import { computed, getCurrentInstance, getCurrentScope, inject, onScopeDispose, provide } from 'vue'
 import { VERIFIC_SYMBOL } from '../utils/constants'
 import { unwrapSchema } from '../utils/schemaUtils'
 import { resolveValidationMessage } from '../validation/issuePipeline'
 import { pathsEqual, selectorSegments } from '../validation/paths'
-import { snapshotValidationData, structurallyEqual } from '../validation/registrationObservation'
+import { structurallyEqual } from '../validation/registrationObservation'
 import { createValidationScope } from '../validation/scope'
 
 export type ValidationFields<Schema extends StandardSchemaV1> = {
@@ -159,7 +159,7 @@ export function useValidation<Schema extends StandardSchemaV1>(
   const group = createGroup<ValidationPath<Schema>>(scope, groupPrefix)
   const result = computed(() => registration.readResult() as RegistrationResult<StandardSchemaV1.InferOutput<Schema>>)
   const ownIssues = computed(registration.readIssues)
-  const bindings = createBindings(group, model as ValidationData<Schema>, {
+  const bindings = createBindings(group, scope, groupPrefix, {
     validateOn: options.validateOn,
     debounce: options.debounce,
   })
@@ -182,6 +182,7 @@ interface CommitRecord {
   readonly path: readonly PropertyKey[]
   value: unknown
   pending?: Promise<TargetValidationResult>
+  queued?: Promise<TargetValidationResult>
   timer?: ReturnType<typeof setTimeout>
   resolve?: (result: TargetValidationResult) => void
   reject?: (reason: unknown) => void
@@ -189,20 +190,16 @@ interface CommitRecord {
 
 function createBindings<Path>(
   group: ValidationGroup<Path>,
-  model: unknown,
+  scope: InternalValidationScope,
+  prefix: readonly PropertyKey[],
   defaults: Pick<ValidationOptions, 'validateOn' | 'debounce'>,
 ) {
   const records: CommitRecord[] = []
+  let disposed = false
+  const stopReset = scope.onReset(cancelQueued)
 
   function readValue(path: Path): unknown {
-    let value = unref(model)
-    for (const segment of selectorSegments(path)) {
-      value = unref(value)
-      if ((typeof value !== 'object' && typeof value !== 'function') || value === null || !Object.hasOwn(value, segment))
-        return undefined
-      value = Reflect.get(value, segment)
-    }
-    return snapshotValidationData(unref(value))
+    return scope.captureBindingContext([...prefix, ...selectorSegments(path)])
   }
 
   function recordFor(path: Path): CommitRecord {
@@ -220,40 +217,72 @@ function createBindings<Path>(
     group.touch(path)
     const pending = group.validateAt(path)
     record.pending = pending
-    void pending.finally(() => {
-      if (record.pending === pending)
+    void pending.then(() => {
+      if (record.pending === pending) {
         record.pending = undefined
-    }).catch(() => {})
+      }
+    }, () => {
+      if (record.pending === pending) {
+        record.value = Symbol('failed')
+        record.pending = undefined
+      }
+    })
     return pending
   }
 
   function commit(path: Path, options: Pick<ValidationBindingOptions, 'debounce'> = {}): Promise<TargetValidationResult> {
+    if (disposed)
+      return Promise.reject(abortError())
+    const debounce = options.debounce ?? defaults.debounce ?? 0
+    if (!Number.isFinite(debounce) || debounce < 0)
+      return Promise.reject(new RangeError('debounce must be a finite non-negative number'))
     const record = recordFor(path)
     const value = readValue(path)
-    if (structurallyEqual(record.value, value)) {
-      return record.pending ?? Promise.resolve({ issues: group.issuesFor(path) })
+    const state = group.stateFor(path)
+    if (!record.queued && structurallyEqual(record.value, value)) {
+      if (record.pending)
+        return record.pending
+      if (state.validated && !state.stale) {
+        group.touch(path)
+        return Promise.resolve({ issues: group.issuesFor(path) })
+      }
     }
 
-    const debounce = options.debounce ?? defaults.debounce
-    if (!debounce)
-      return run(path, record, value)
-
-    record.value = value
-    const rescheduling = record.timer !== undefined
-    if (record.timer)
+    if (record.timer !== undefined)
       clearTimeout(record.timer)
-    const pending = rescheduling && record.pending
-      ? record.pending
+    if (!debounce) {
+      const resolve = record.resolve
+      const reject = record.reject
+      record.queued = undefined
+      record.timer = undefined
+      record.resolve = undefined
+      record.reject = undefined
+      const pending = run(path, record, value)
+      if (resolve)
+        void pending.then(resolve, reject)
+      return pending
+    }
+
+    const pending = record.queued
+      ? record.queued
       : new Promise<TargetValidationResult>((resolve, reject) => {
           record.resolve = resolve
           record.reject = reject
         })
-    record.pending = pending
+    record.queued = pending
     record.timer = setTimeout(() => {
+      const resolve = record.resolve!
+      const reject = record.reject!
       record.timer = undefined
-      run(path, record, readValue(path)).then(record.resolve, record.reject)
+      record.queued = undefined
       record.resolve = undefined
       record.reject = undefined
+      try {
+        void run(path, record, readValue(path)).then(resolve, reject)
+      }
+      catch (reason) {
+        reject(reason)
+      }
     }, debounce)
     return pending
   }
@@ -279,12 +308,10 @@ function createBindings<Path>(
     }
   }
 
-  function dispose(): void {
+  function cancelQueued(reason: Error): void {
     for (const record of records) {
-      if (record.timer) {
+      if (record.timer !== undefined) {
         clearTimeout(record.timer)
-        const reason = new Error('Validation commit was disposed')
-        reason.name = 'AbortError'
         record.reject?.(reason)
         record.timer = undefined
         record.pending = undefined
@@ -292,6 +319,19 @@ function createBindings<Path>(
         record.reject = undefined
       }
     }
+    records.splice(0)
+  }
+
+  function abortError(): Error {
+    const reason = new Error('Validation commit was disposed')
+    reason.name = 'AbortError'
+    return reason
+  }
+
+  function dispose(): void {
+    disposed = true
+    stopReset()
+    cancelQueued(abortError())
   }
 
   return { commit, on, group: validationGroup, dispose }

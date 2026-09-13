@@ -108,6 +108,54 @@ describe('useValidation composition', () => {
 })
 
 describe('validation bindings', () => {
+  it('revalidates unchanged fields after sibling edits and reset', async () => {
+    const model = reactive({ password: 'a', confirmation: 'b' })
+    const validator = vi.fn((value: typeof model) => value.password === value.confirmation
+      ? { value }
+      : { issues: [{ message: 'Mismatch', path: ['confirmation'] }] })
+    const schema = createSchema<typeof model>('test', validator)
+    const mounted = mountValidation(() => ({ root: useValidation(), child: useValidation(schema, model) }), false)
+    await mounted.value.child.commit('confirmation')
+    model.password = 'b'
+    await mounted.value.child.commit('confirmation')
+    expect(mounted.value.child.hasError('confirmation')).toBe(false)
+    expect(validator).toHaveBeenCalledTimes(2)
+    mounted.value.root.resetState()
+    await mounted.value.child.commit('confirmation')
+    expect(validator).toHaveBeenCalledTimes(3)
+    expect(mounted.value.child.stateFor('confirmation').touched).toBe(true)
+  })
+
+  it('retries rejected commits without requiring an edit', async () => {
+    const validator = vi.fn()
+      .mockRejectedValueOnce(new Error('Offline'))
+      .mockResolvedValue({ value: { email: '' } })
+    const schema = createSchema<{ email: string }>('test', validator)
+    const mounted = mountValidation(() => useValidation(schema, { email: ref('') }), false)
+    await expect(mounted.value.commit('email')).rejects.toThrow('Offline')
+    await mounted.value.commit('email')
+    expect(validator).toHaveBeenCalledTimes(2)
+  })
+
+  it('cancels descendant binding timers when a root resets', async () => {
+    vi.useFakeTimers()
+    try {
+      const validator = vi.fn((value: { email: string }) => ({ value }))
+      const schema = createSchema<{ email: string }>('test', validator)
+      const mounted = mountValidation(() => ({ root: useValidation(), child: useValidation(schema, { email: ref('') }) }), false)
+      const pending = mounted.value.child.commit('email', { debounce: 200 })
+      const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+      mounted.value.root.resetState()
+      await rejection
+      await vi.advanceTimersByTimeAsync(300)
+      expect(validator).not.toHaveBeenCalled()
+      expect(mounted.value.child.stateFor('email').touched).toBe(false)
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('binds blur and change to one value-deduplicated commit', async () => {
     const validator = vi.fn((value: { email: string }) => value.email
       ? { value }
