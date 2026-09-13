@@ -15,7 +15,6 @@ import { z } from 'zod'
 const email = ref('')
 const schema = z.object({ email: z.string().email() })
 const { errorsFor, on, state, validate } = useValidation(schema, { email })
-const emailBinding = on('email', { describedBy: 'email-errors' })
 
 async function submit() {
   const result = await validate()
@@ -36,7 +35,7 @@ async function submit() {
       v-model="email"
       type="email"
       required
-      v-bind="emailBinding"
+      v-bind="on('email', { describedBy: 'email-errors' })"
     >
     <div id="email-errors" aria-live="polite">
       <p v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">

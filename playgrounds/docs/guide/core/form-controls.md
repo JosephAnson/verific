@@ -12,11 +12,10 @@ Verific validates application-owned values; it never owns or returns a control's
 
 ```ts
 const { on } = useValidation(schema, { email })
-const emailBinding = on('email', { describedBy: 'email-errors' })
 ```
 
 ```vue
-<input v-model="email" type="email" v-bind="emailBinding">
+<input v-model="email" type="email" v-bind="on('email', { describedBy: 'email-errors' })">
 
 <ul id="email-errors">
   <!-- render errors here -->
@@ -69,18 +68,12 @@ Most form controls reduce to a small set of model shapes and events:
 
 Text-like fields usually validate on blur so validation does not interrupt typing. Keep an explicit blank state for numeric fields; `v-model.number` leaves an empty number input as `''` rather than inventing zero.
 
-```ts
-const emailBinding = on('email', { describedBy: 'email-errors' })
-const ageBinding = on('age', { describedBy: 'age-errors' })
-const volumeBinding = on('volume', { describedBy: 'volume-errors' })
-```
-
 ```vue
-<input v-model="email" type="email" v-bind="emailBinding">
+<input v-model="email" type="email" v-bind="on('email', { describedBy: 'email-errors' })">
 
-<input v-model.number="age" type="number" v-bind="ageBinding">
+<input v-model.number="age" type="number" v-bind="on('age', { describedBy: 'age-errors' })">
 
-<input v-model.number="volume" type="range" v-bind="volumeBinding">
+<input v-model.number="volume" type="range" v-bind="on('volume', { describedBy: 'volume-errors' })">
 ```
 
 If an application deliberately validates while a range thumb moves, use `on('volume', { trigger: 'input', debounce: 200 })`. Use `{ trigger: 'submit' }` to return accessibility bindings without event-driven validation.
@@ -89,18 +82,13 @@ If an application deliberately validates while a range thumb moves, use `on('vol
 
 Radio buttons behave like one scalar choice. A multiple select behaves like a checkbox group and supplies an array:
 
-```ts
-const deliveryBinding = group('delivery', { describedBy: 'delivery-errors' })
-const topicsBinding = on('topics', { describedBy: 'topics-errors' })
-```
-
 ```vue
-<fieldset v-bind="deliveryBinding">
+<fieldset v-bind="group('delivery', { describedBy: 'delivery-errors' })">
   <input v-model="delivery" type="radio" value="standard">
   <input v-model="delivery" type="radio" value="express">
 </fieldset>
 
-<select v-model="topics" multiple v-bind="topicsBinding">
+<select v-model="topics" multiple v-bind="on('topics', { describedBy: 'topics-errors' })">
   <option value="design">Design</option>
   <option value="testing">Testing</option>
 </select>

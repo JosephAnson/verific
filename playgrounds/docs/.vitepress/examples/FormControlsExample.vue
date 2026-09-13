@@ -27,11 +27,6 @@ const { errorsFor, hasError, state, validate, on, group } = useValidation(schema
   country,
   interests,
 })
-const ageBinding = on('age', { describedBy: 'controls-age-errors' })
-const countryBinding = on('country', { describedBy: 'controls-country-errors' })
-const interestsBinding = group('interests', {
-  describedBy: 'controls-interests-requirement controls-interests-errors',
-})
 const visibleSubmissionMessage = computed(() => (
   state.value.stale
     ? 'The preferences changed after validation. Validate again.'
@@ -85,10 +80,7 @@ async function onSubmit() {
             min="18"
             step="1"
             required
-            :aria-invalid="ageBinding['aria-invalid']"
-            aria-describedby="controls-age-errors"
-            @blur="ageBinding.onBlur"
-            @change="ageBinding.onChange"
+            v-bind="on('age', { describedBy: 'controls-age-errors' })"
           >
           <ul id="controls-age-errors" class="verific-example__errors" aria-live="polite" aria-atomic="true">
             <li v-for="(error, index) in errorsFor('age')" :key="`${index}:${error}`">
@@ -103,10 +95,7 @@ async function onSubmit() {
             id="controls-country"
             v-model="country"
             required
-            :aria-invalid="countryBinding['aria-invalid']"
-            aria-describedby="controls-country-errors"
-            @blur="countryBinding.onBlur"
-            @change="countryBinding.onChange"
+            v-bind="on('country', { describedBy: 'controls-country-errors' })"
           >
             <option value="">
               Choose a country
@@ -129,9 +118,7 @@ async function onSubmit() {
       <fieldset
         class="verific-example__field verific-example__choice-group"
         data-validation-required-group
-        :aria-invalid="interestsBinding['aria-invalid']"
-        aria-describedby="controls-interests-requirement controls-interests-errors"
-        @change="interestsBinding.onChange"
+        v-bind="group('interests', { describedBy: 'controls-interests-requirement controls-interests-errors' })"
       >
         <legend>Interests (choose at least one — required)</legend>
         <p id="controls-interests-requirement" class="verific-example__hint">
