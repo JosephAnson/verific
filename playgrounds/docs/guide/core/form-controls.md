@@ -23,7 +23,7 @@ const emailBinding = on('email', { describedBy: 'email-errors' })
 </ul>
 ```
 
-The default binding includes both blur and change handlers. They share one commit and deduplicate the current model value, so text inputs, selects and radios can use the same binding even when a browser fires both events. A commit touches the path before targeted validation.
+The default binding includes both blur and change handlers. They share one commit and deduplicate the current model value, so text inputs, selects and radios can use the same binding even when a browser fires both events. A commit touches the path before targeted validation. Set form-wide defaults with `useValidation(schema, model, { validateOn: 'input', debounce: 200 })`; a binding's `trigger` and `debounce` options override them.
 
 - Use `commit(path)` for custom controls after assigning their emitted value. It performs the same touch, deduplication and targeted validation as a binding.
 - Use `validate()` for submission. Its full result is the only authority for continuing to the next application step.

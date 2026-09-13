@@ -159,6 +159,33 @@ describe('validation bindings', () => {
     vi.useRealTimers()
   })
 
+  it('uses controller trigger and debounce defaults with per-binding overrides', async () => {
+    vi.useFakeTimers()
+    const validator = vi.fn((value: { email: string }) => ({ value }))
+    const schema = createSchema<{ email: string }>('test', validator)
+    const email = ref('')
+    const mounted = mountValidation(() => useValidation(schema, { email }, {
+      validateOn: 'input',
+      debounce: 100,
+    }), false)
+    const inherited = mounted.value.on('email')
+    const overridden = mounted.value.on('email', { trigger: 'blur', debounce: 0 })
+
+    expect(inherited.onInput).toBeTypeOf('function')
+    expect(inherited.onBlur).toBeUndefined()
+    email.value = 'first@example.com'
+    inherited.onInput?.()
+    await vi.advanceTimersByTimeAsync(99)
+    expect(validator).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    await vi.waitFor(() => expect(validator).toHaveBeenCalledOnce())
+
+    email.value = 'second@example.com'
+    await overridden.onBlur?.()
+    expect(validator).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+  })
+
   it('exposes custom commits and group change bindings', async () => {
     const validator = vi.fn((value: { interests: string[] }) => ({ value }))
     const schema = createSchema<{ interests: string[] }>('test', validator)

@@ -41,6 +41,8 @@ export interface ValidationScopeOptions {
 
 export interface ValidationOptions extends ValidationScopeOptions {
   readonly at?: readonly PropertyKey[]
+  readonly validateOn?: ValidationTrigger
+  readonly debounce?: number
 }
 
 export type ValidationResult
@@ -157,7 +159,10 @@ export function useValidation<Schema extends StandardSchemaV1>(
   const group = createGroup<ValidationPath<Schema>>(scope, groupPrefix)
   const result = computed(() => registration.readResult() as RegistrationResult<StandardSchemaV1.InferOutput<Schema>>)
   const ownIssues = computed(registration.readIssues)
-  const bindings = createBindings(group, model as ValidationData<Schema>)
+  const bindings = createBindings(group, model as ValidationData<Schema>, {
+    validateOn: options.validateOn,
+    debounce: options.debounce,
+  })
 
   if (getCurrentScope()) {
     onScopeDispose(bindings.dispose)
@@ -182,7 +187,11 @@ interface CommitRecord {
   reject?: (reason: unknown) => void
 }
 
-function createBindings<Path>(group: ValidationGroup<Path>, model: unknown) {
+function createBindings<Path>(
+  group: ValidationGroup<Path>,
+  model: unknown,
+  defaults: Pick<ValidationOptions, 'validateOn' | 'debounce'>,
+) {
   const records: CommitRecord[] = []
 
   function readValue(path: Path): unknown {
@@ -225,7 +234,8 @@ function createBindings<Path>(group: ValidationGroup<Path>, model: unknown) {
       return record.pending ?? Promise.resolve({ issues: group.issuesFor(path) })
     }
 
-    if (!options.debounce)
+    const debounce = options.debounce ?? defaults.debounce
+    if (!debounce)
       return run(path, record, value)
 
     record.value = value
@@ -244,12 +254,12 @@ function createBindings<Path>(group: ValidationGroup<Path>, model: unknown) {
       run(path, record, readValue(path)).then(record.resolve, record.reject)
       record.resolve = undefined
       record.reject = undefined
-    }, options.debounce)
+    }, debounce)
     return pending
   }
 
   function on(path: Path, options: ValidationBindingOptions = {}): ValidationBindings {
-    const trigger = options.trigger
+    const trigger = options.trigger ?? defaults.validateOn
     const handler = () => commit(path, options)
     return {
       get 'aria-invalid'() { return group.hasError(path) },
@@ -261,10 +271,11 @@ function createBindings<Path>(group: ValidationGroup<Path>, model: unknown) {
   }
 
   function validationGroup(path: Path, options: Pick<ValidationBindingOptions, 'debounce' | 'describedBy'> = {}): ValidationGroupBindings {
+    const commitOptions = { debounce: options.debounce ?? defaults.debounce }
     return {
       get 'aria-invalid'() { return group.hasError(path) },
       'aria-describedby': options.describedBy,
-      'onChange': () => commit(path, options),
+      'onChange': () => commit(path, commitOptions),
     }
   }
 

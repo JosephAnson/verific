@@ -164,6 +164,8 @@ Schema registrations also accept:
 | Option | Type | Purpose |
 | --- | --- | --- |
 | `at` | `readonly PropertyKey[]` | Prefix issue paths without changing the value passed to the schema. |
+| `validateOn` | `'blur' \| 'change' \| 'input' \| 'submit'` | Set the default trigger for this controller's `on()` bindings. Omit it to bind both blur and change. |
+| `debounce` | `number` | Set the default debounce in milliseconds for `on()`, `group()` and `commit()`. |
 
 ```ts
 const { errorsFor, hasError, validateAt } = useValidation(addressSchema, address, {
