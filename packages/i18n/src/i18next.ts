@@ -1,8 +1,8 @@
 import type { DiagnosticMessageAdapter, MessageContext } from '@verific/core'
-import type { CatalogueMessagesOptions } from '@verific/i18n'
 import type { i18n as I18nextInstance, TOptions } from 'i18next'
-import { createCatalogueMessages } from '@verific/i18n'
+import type { CatalogueMessagesOptions } from './main'
 import { shallowRef } from 'vue'
+import { createCatalogueMessages } from './main'
 
 export type I18nextMessagesOptions = CatalogueMessagesOptions
 

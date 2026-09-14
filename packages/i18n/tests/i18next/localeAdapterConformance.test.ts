@@ -1,11 +1,11 @@
 import type { TOptions } from 'i18next'
-import type { ConformanceLookup } from '../../../tests/support/localeAdapterConformance'
+import type { ConformanceLookup } from '../../../../tests/support/localeAdapterConformance'
 import { createInstance } from 'i18next'
 import {
   defineLocaleAdapterConformance,
   nestedMessagesFor,
-} from '../../../tests/support/localeAdapterConformance'
-import { i18nextMessages } from '../src/main'
+} from '../../../../tests/support/localeAdapterConformance'
+import { i18nextMessages } from '../../src/i18next'
 
 defineLocaleAdapterConformance({
   name: 'i18nextMessages',

@@ -220,7 +220,7 @@ const trustedCiWorkflow = {
   },
   name: 'CI',
   on: {
-    pull_request: { branches: ['main'] },
+    pull_request: { branches: ['**'] },
     push: { branches: ['main'] },
   },
   permissions: { contents: 'read' },

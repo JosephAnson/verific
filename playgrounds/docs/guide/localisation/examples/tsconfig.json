@@ -6,9 +6,9 @@
     "paths": {
       "@verific/core": ["../../../../../packages/core/src/main.ts"],
       "@verific/i18n": ["../../../../../packages/i18n/src/main.ts"],
-      "@verific/i18next": ["../../../../../packages/i18next/src/main.ts"],
-      "@verific/paraglide": ["../../../../../packages/paraglide/src/main.ts"],
-      "@verific/vue-i18n": ["../../../../../packages/vue-i18n/src/main.ts"],
+      "@verific/i18n/i18next": ["../../../../../packages/i18n/src/i18next.ts"],
+      "@verific/i18n/paraglide": ["../../../../../packages/i18n/src/paraglide.ts"],
+      "@verific/i18n/vue-i18n": ["../../../../../packages/i18n/src/vue-i18n.ts"],
       "~/*": ["./*"]
     },
     "allowJs": false,

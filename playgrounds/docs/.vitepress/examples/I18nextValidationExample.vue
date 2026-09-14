@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { CatalogueMissingMessageDiagnostic } from '@verific/i18n'
 import { useValidation } from '@verific/core'
-import { i18nextMessages } from '@verific/i18next'
+import { i18nextMessages } from '@verific/i18n/i18next'
 import { createInstance } from 'i18next'
 import { computed, onUnmounted, ref } from 'vue'
 import { z } from 'zod'

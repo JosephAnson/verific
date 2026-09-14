@@ -34,7 +34,11 @@ Run the same checks expected in continuous integration:
 pnpm check
 ```
 
-The integrated check covers linting, strict package and playground type checks, coverage, package and playground builds, documentation, high-severity dependency advisories, registry signatures, and the packed Nuxt 3/4 request-local localisation matrix. Use `pnpm test:watch` while developing tests. Tests live alongside their package under `packages/*/tests`.
+The integrated check covers linting, strict package and playground type checks, coverage, package and playground builds, documentation, high-severity dependency advisories, registry signatures, the core bundle-size budget, and the packed Nuxt 3/4 request-local localisation matrix. Use `pnpm test:watch` while developing tests. Tests live alongside their package under `packages/*/tests`.
+
+`pnpm size:check` bundles all public core exports for production with Vue external,
+minifies the ESM for ES2022 and measures gzip at level 9. CI rejects a bundle above
+12,000 bytes. A consumer importing fewer APIs can produce a smaller bundle.
 
 The targeted package, documentation and integration gates build their own prerequisites, so each can run from a clean checkout:
 
@@ -63,9 +67,9 @@ The documentation site uses VitePress and lives in `playgrounds/docs`. Keep exam
 
 ## Releasing
 
-Verific releases as one workspace. The root manifest and all six public package manifests must always use the same stable version, with one matching `v${version}` tag. Never version or tag a package independently.
+Verific releases as one workspace. The root manifest and all three public package manifests must always use the same stable version, with one matching `v${version}` tag. Never version or tag a package independently.
 
-For a future version that has not been staged, run `pnpm release` from the repository root. This is the sole versioning entry point. It updates all seven manifests without running lifecycle scripts, committing, tagging or pushing; review the resulting diff, commit it, push `main`, and wait for required CI to pass before creating the tag. Do not rerun the command for a version already staged in every manifest.
+For a future version that has not been staged, run `pnpm release` from the repository root. This is the sole versioning entry point. It updates all four manifests without running lifecycle scripts, committing, tagging or pushing; review the resulting diff, commit it, push `main`, and wait for required CI to pass before creating the tag. Do not rerun the command for a version already staged in every manifest.
 
 Before creating any release tag, protect `main` from deletion and force pushes, and protect `v*` tags from updates and deletions while allowing only the release maintainer to create them. Stop if those rules are absent. A break-glass ruleset change must be documented, approved and restored immediately; it must never be used to replace an npm release.
 
@@ -90,9 +94,6 @@ For an initial publication, `release:publish` fails before publication unless al
 
 - `@verific/core`
 - `@verific/i18n`
-- `@verific/i18next`
-- `@verific/vue-i18n`
-- `@verific/paraglide`
 - `@verific/nuxt`
 
 The local path deliberately does not request npm provenance: npm only generates provenance for supported cloud CI publishers. Let npm prompt interactively for any web authentication or one-time password; never put credentials or OTP values in a script, command history or committed `.npmrc`. The repository workflows require no npm credential. Remove any obsolete `NPM_TOKEN` repository secret or npm trusted-publisher entry after confirming it is not used elsewhere.
@@ -106,7 +107,7 @@ pnpm release:publish
 git switch main
 ```
 
-Retry mode requires the tagged commit to remain in current canonical `origin/main` history. Its stronger custom clean-tree, canonical-origin, ancestry and local/remote-tag checks replace pnpm's tip-of-branch check so an older immutable tag can finish. Before any further write, the command repacks all six packages and requires every existing npm tarball to have the same SHA-512 integrity; it then publishes only missing tarballs and verifies all six. An integrity mismatch means the partial release did not come from these guarded contents: stop and use a new coordinated version. Do not unpublish, replace, move, delete or reuse that release identity.
+Retry mode requires the tagged commit to remain in current canonical `origin/main` history. Its stronger custom clean-tree, canonical-origin, ancestry and local/remote-tag checks replace pnpm's tip-of-branch check so an older immutable tag can finish. Before any further write, the command repacks all three packages and requires every existing npm tarball to have the same SHA-512 integrity; it then publishes only missing tarballs and verifies all three. An integrity mismatch means the partial release did not come from these guarded contents: stop and use a new coordinated version. Do not unpublish, replace, move, delete or reuse that release identity.
 
 Only after `release:publish` succeeds, create the public release manually:
 

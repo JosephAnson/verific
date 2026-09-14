@@ -1,5 +1,5 @@
 import { createVerific } from '@verific/core'
-import { vueI18nMessages } from '@verific/vue-i18n'
+import { vueI18nMessages } from '@verific/i18n/vue-i18n'
 import { createApp } from 'vue'
 import App from './App.vue'
 import { i18n } from './i18n'

@@ -1,8 +1,8 @@
 {
   "name": "@verific/i18n",
-  "type": "commonjs",
+  "type": "module",
   "version": "0.4.0",
-  "description": "Shared catalogue message adapter for Verific",
+  "description": "Catalogue, Vue I18n, i18next and Paraglide message adapters for Verific",
   "author": {
     "name": "Joseph Anson",
     "url": "https://github.com/josephanson"
@@ -27,37 +27,66 @@
   "sideEffects": false,
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/main.d.mts",
-        "default": "./dist/main.mjs"
-      },
-      "require": {
-        "types": "./dist/main.d.ts",
-        "default": "./dist/main.js"
-      }
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
+    },
+    "./i18next": {
+      "types": "./dist/i18next.d.ts",
+      "import": "./dist/i18next.js"
+    },
+    "./paraglide": {
+      "types": "./dist/paraglide.d.ts",
+      "import": "./dist/paraglide.js"
+    },
+    "./vue-i18n": {
+      "types": "./dist/vue-i18n.d.ts",
+      "import": "./dist/vue-i18n.js"
     }
   },
   "main": "./dist/main.js",
-  "module": "./dist/main.mjs",
+  "module": "./dist/main.js",
   "types": "./dist/main.d.ts",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/main.ts --format cjs,esm --dts --clean",
+    "build": "tsup src/main.ts src/vue-i18n.ts src/i18next.ts src/paraglide.ts --format esm --dts --clean",
     "test": "vitest run --root ../.. --config packages/i18n/vitest.config.mts packages/i18n/tests",
     "typecheck": "tsc --noEmit -p tsconfig.json --skipLibCheck",
     "prepack": "pnpm build"
   },
   "peerDependencies": {
-    "@verific/core": "workspace:^"
-  },
-  "devDependencies": {
-    "@verific/core": "workspace:*",
-    "tsup": "^8.5.1"
+    "@inlang/paraglide-js": ">=2 <3",
+    "@verific/core": "workspace:^",
+    "i18next": ">=26 <27",
+    "vue": "^3.4.26",
+    "vue-i18n": ">=11.1.12 <11.2"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "peerDependenciesMeta": {
+    "@inlang/paraglide-js": {
+      "optional": true
+    },
+    "i18next": {
+      "optional": true
+    },
+    "vue-i18n": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@intlify/devtools-types": "11.1.12"
+  },
+  "devDependencies": {
+    "@inlang/paraglide-js": "2.25.0",
+    "@intlify/devtools-types": "11.1.12",
+    "@verific/core": "workspace:*",
+    "i18next": "26.4.0",
+    "tsup": "^8.5.1",
+    "vue": "^3.5.42",
+    "vue-i18n": "11.1.12"
   }
 }

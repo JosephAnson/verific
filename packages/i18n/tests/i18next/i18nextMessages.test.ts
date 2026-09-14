@@ -2,7 +2,7 @@ import type { MessageContext, ValidationIssue } from '@verific/core'
 import { createInstance } from 'i18next'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { computed } from 'vue'
-import { i18nextMessages } from '../src/main'
+import { i18nextMessages } from '../../src/i18next'
 
 function issue(
   path: readonly PropertyKey[] = ['email'],

@@ -1,7 +1,7 @@
-import type { ConformanceLookup } from '../../../tests/support/localeAdapterConformance'
+import type { ConformanceLookup } from '../../../../tests/support/localeAdapterConformance'
 import { ref } from 'vue'
-import { defineLocaleAdapterConformance } from '../../../tests/support/localeAdapterConformance'
-import { vueI18nMessages } from '../src/main'
+import { defineLocaleAdapterConformance } from '../../../../tests/support/localeAdapterConformance'
+import { vueI18nMessages } from '../../src/vue-i18n'
 
 defineLocaleAdapterConformance({
   name: 'vueI18nMessages',

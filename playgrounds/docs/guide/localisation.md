@@ -14,12 +14,24 @@ Choose the adapter for the locale library your application already uses:
 
 | Application locale library | Adapter | Guide |
 | --- | --- | --- |
-| Vue I18n | `@verific/vue-i18n` | [Vue I18n](./localisation/vue-i18n) |
-| i18next or i18next-vue | `@verific/i18next` | [i18next](./localisation/i18next) |
-| Paraglide JS | `@verific/paraglide` | [Paraglide](./localisation/paraglide) |
+| Vue I18n | `@verific/i18n/vue-i18n` | [Vue I18n](./localisation/vue-i18n) |
+| i18next or i18next-vue | `@verific/i18n/i18next` | [i18next](./localisation/i18next) |
+| Paraglide JS | `@verific/i18n/paraglide` | [Paraglide](./localisation/paraglide) |
 | Another catalogue | `@verific/i18n` | [Custom adapters](./localisation/custom-adapters) |
 
-Each adapter is optional and independently installed. Core does not depend on a locale library.
+Install `@verific/i18n` once, then import the subpath for your app's locale
+runtime. The locale peers are optional and each entry loads only its own adapter.
+Core does not depend on a locale library.
+
+## Migrating from the separate adapter packages
+
+Replace `@verific/vue-i18n`, `@verific/i18next` or `@verific/paraglide` in your
+dependencies with `@verific/i18n`. Add `/vue-i18n`, `/i18next` or `/paraglide` to
+the import from `@verific/i18n`; factory names and options stay the same.
+The root `createCatalogueMessages` import is unchanged.
+
+All Verific packages now expose ESM entry points. Use `import` or dynamic
+`import()` when moving code that previously used CommonJS `require()`.
 
 ## The shared message contract
 
@@ -92,15 +104,15 @@ For server rendering, create or obtain locale state inside the request or applic
 
 The tested baselines match each adapter package's peer dependencies.
 
-<!-- verific-adapter:@verific/vue-i18n runtime=vue-i18n factory=vueI18nMessages -->
-<!-- verific-adapter:@verific/i18next runtime=i18next factory=i18nextMessages -->
-<!-- verific-adapter:@verific/paraglide runtime=@inlang/paraglide-js factory=paraglideMessages -->
+<!-- verific-adapter:@verific/i18n/vue-i18n runtime=vue-i18n factory=vueI18nMessages -->
+<!-- verific-adapter:@verific/i18n/i18next runtime=i18next factory=i18nextMessages -->
+<!-- verific-adapter:@verific/i18n/paraglide runtime=@inlang/paraglide-js factory=paraglideMessages -->
 
 | Adapter | Direct locale runtime | Supported range | Tested baseline |
 | --- | --- | --- | --- |
-| `@verific/vue-i18n` | `vue-i18n` | `>=11.1.12 <11.2` | `11.1.12` |
-| `@verific/i18next` | `i18next` | `>=26 <27` | `26.4.0` |
-| `@verific/i18next` | `vue` (reactivity) | `^3.4.26` | `^3.5.42` |
-| `@verific/paraglide` | `@inlang/paraglide-js` | `>=2 <3` | `2.25.0` |
+| `@verific/i18n/vue-i18n` | `vue-i18n` | `>=11.1.12 <11.2` | `11.1.12` |
+| `@verific/i18n/i18next` | `i18next` | `>=26 <27` | `26.4.0` |
+| `@verific/i18n/i18next` | `vue` (reactivity) | `^3.4.26` | `^3.5.42` |
+| `@verific/i18n/paraglide` | `@inlang/paraglide-js` | `>=2 <3` | `2.25.0` |
 
 Vue I18n, i18next and Paraglide are not transitive requirements of one another. See [Nuxt](./nuxt) for request-local application plugin examples, or read the [message-resolution reference](./reference/messages) for the core contracts.

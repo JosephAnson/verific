@@ -11,10 +11,7 @@ export const npmRegistry = 'https://registry.npmjs.org/'
 export const releasePackages = [
   { manifestPath: 'packages/core/package.json', name: '@verific/core' },
   { manifestPath: 'packages/i18n/package.json', name: '@verific/i18n' },
-  { manifestPath: 'packages/i18next/package.json', name: '@verific/i18next' },
   { manifestPath: 'packages/nuxt/package.json', name: '@verific/nuxt' },
-  { manifestPath: 'packages/paraglide/package.json', name: '@verific/paraglide' },
-  { manifestPath: 'packages/vue-i18n/package.json', name: '@verific/vue-i18n' },
 ]
 
 export const expectedPublicPackageNames = releasePackages.map(({ name }) => name)

@@ -25,6 +25,13 @@ and choose when validation runs.
 pnpm add @verific/core zod
 ```
 
+Packages are ESM-only. Locale adapters share one optional package,
+`@verific/i18n`, with separate `vue-i18n`, `i18next` and `paraglide` subpath
+imports. See [Localisation](https://verific.josephanson.com/guide/localisation).
+
+CI enforces a **12 kB minified + gzip budget** for all public core exports
+together, with Vue excluded. Run `pnpm size:check` to measure the current build.
+
 ## Vue quick start
 
 ```vue

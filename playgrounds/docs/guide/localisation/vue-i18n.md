@@ -4,12 +4,12 @@ outline: deep
 
 # Vue I18n
 
-Use `@verific/vue-i18n` with a caller-owned Vue I18n 11 Composition API Composer.
+Use `@verific/i18n/vue-i18n` with a caller-owned Vue I18n 11 Composition API Composer.
 
 ## Install and configure the application
 
 ```bash
-pnpm add @verific/core @verific/vue-i18n vue vue-i18n@11.1.12 zod
+pnpm add @verific/core @verific/i18n vue vue-i18n@11.1.12 zod
 ```
 
 <<< ./examples/vue-i18n-setup.ts
@@ -111,4 +111,4 @@ set `verific.global` to `false` and create Vue I18n plus Verific inside each
 application plugin execution; see [Nuxt request-local Vue I18n](../nuxt#request-local-vue-i18n).
 Do not share a mutable Composer between requests.
 
-See the [shared missing-message policies](../localisation#missing-messages) and [`@verific/vue-i18n` package README](https://github.com/josephanson/verific/tree/main/packages/vue-i18n) for the complete adapter surface.
+See the [shared missing-message policies](../localisation#missing-messages) and [`@verific/i18n/vue-i18n` package README](https://github.com/josephanson/verific/tree/main/packages/i18n) for the complete adapter surface.

@@ -8,12 +8,12 @@ import ParaglideValidationExample from '../../.vitepress/examples/ParaglideValid
 
 # Paraglide
 
-`@verific/paraglide` accepts an explicit map of generated Paraglide 2 message functions. The map is typed, auditable and tree-shakeable; the adapter never guesses generated export names or reads a process-global locale.
+`@verific/i18n/paraglide` accepts an explicit map of generated Paraglide 2 message functions. The map is typed, auditable and tree-shakeable; the adapter never guesses generated export names or reads a process-global locale.
 
 ## Install and configure the application
 
 ```bash
-pnpm add @inlang/paraglide-js @verific/core @verific/paraglide vue zod
+pnpm add @inlang/paraglide-js @verific/core @verific/i18n vue zod
 ```
 
 After [generating your Paraglide messages](https://inlang.com/m/gerre34r/library-inlang-paraglideJs), statically import each function used for validation:
@@ -119,4 +119,4 @@ path is tested.
 
 For SSR, create a request-owned locale ref or getter and create the adapter inside that application boundary. Do not call an ambient mutable locale selector. See the [request-safe Nuxt plugin](../nuxt#manual-paraglide-plugin).
 
-See the [shared fallback contract](../localisation#the-shared-message-contract) and [`@verific/paraglide` package README](https://github.com/josephanson/verific/tree/main/packages/paraglide) for the complete adapter surface.
+See the [shared fallback contract](../localisation#the-shared-message-contract) and [`@verific/i18n/paraglide` package README](https://github.com/josephanson/verific/tree/main/packages/i18n) for the complete adapter surface.

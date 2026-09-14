@@ -8,12 +8,12 @@ import I18nextValidationExample from '../../.vitepress/examples/I18nextValidatio
 
 # i18next
 
-`@verific/i18next` uses a caller-owned i18next 26 instance. Install that same instance through i18next-vue when the rest of the application also uses i18next.
+`@verific/i18n/i18next` uses a caller-owned i18next 26 instance. Install that same instance through i18next-vue when the rest of the application also uses i18next.
 
 ## Install and configure the application
 
 ```bash
-pnpm add @verific/core @verific/i18next i18next i18next-vue vue zod
+pnpm add @verific/core @verific/i18n i18next i18next-vue vue zod
 ```
 
 <<< ./examples/i18next-setup.ts
@@ -114,4 +114,4 @@ adapter. The shown factory is compiled and its throw path is tested.
 
 For SSR, create and initialise the i18next instance and adapter inside each request. Dispose the adapter when that request or application finishes; never export a mutable server singleton. See the [request-safe Nuxt plugin](../nuxt#manual-i18next-plugin).
 
-See the [shared missing-message policies](../localisation#missing-messages) and [`@verific/i18next` package README](https://github.com/josephanson/verific/tree/main/packages/i18next) for the complete adapter surface.
+See the [shared missing-message policies](../localisation#missing-messages) and [`@verific/i18n/i18next` package README](https://github.com/josephanson/verific/tree/main/packages/i18n) for the complete adapter surface.
