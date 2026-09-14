@@ -22,7 +22,7 @@ const interests = ref<string[]>([])
 const readyMessage = 'Submit to validate every field.'
 const validMessage = 'The preferences are valid.'
 const submissionMessage = ref(readyMessage)
-const { errorsFor, hasError, state, validate, on, group } = useValidation(schema, {
+const { commit, errorsFor, hasError, state, validate } = useValidation(schema, {
   age,
   country,
   interests,
@@ -80,7 +80,9 @@ async function onSubmit() {
             min="18"
             step="1"
             required
-            v-bind="on('age', { describedBy: 'controls-age-errors' })"
+            :aria-invalid="hasError('age')"
+            aria-describedby="controls-age-errors"
+            @blur="commit('age')"
           >
           <ul id="controls-age-errors" class="verific-example__errors" aria-live="polite" aria-atomic="true">
             <li v-for="(error, index) in errorsFor('age')" :key="`${index}:${error}`">
@@ -95,7 +97,9 @@ async function onSubmit() {
             id="controls-country"
             v-model="country"
             required
-            v-bind="on('country', { describedBy: 'controls-country-errors' })"
+            :aria-invalid="hasError('country')"
+            aria-describedby="controls-country-errors"
+            @change="commit('country')"
           >
             <option value="">
               Choose a country
@@ -118,7 +122,9 @@ async function onSubmit() {
       <fieldset
         class="verific-example__field verific-example__choice-group"
         data-validation-required-group
-        v-bind="group('interests', { describedBy: 'controls-interests-requirement controls-interests-errors' })"
+        :aria-invalid="hasError('interests')"
+        aria-describedby="controls-interests-requirement controls-interests-errors"
+        @change="commit('interests')"
       >
         <legend>Interests (choose at least one — required)</legend>
         <p id="controls-interests-requirement" class="verific-example__hint">

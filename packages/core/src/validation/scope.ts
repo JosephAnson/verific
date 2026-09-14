@@ -33,7 +33,7 @@ interface CommittedValidationState {
 }
 
 export interface InternalValidationScope {
-  captureBindingContext: (path: readonly PropertyKey[]) => unknown
+  captureCommitContext: (path: readonly PropertyKey[]) => unknown
   onReset: (listener: (reason: Error) => void) => () => void
   readonly isValidating: ComputedRef<boolean>
   readIssues: () => readonly ValidationIssue[]
@@ -774,7 +774,7 @@ export function createValidationScope(
 
   return {
     isValidating,
-    captureBindingContext: path => observation.captureAt(path).stampSnapshots.map(({ id, schema, input }) => ({ id, schema, input })),
+    captureCommitContext: path => observation.captureAt(path).stampSnapshots.map(({ id, schema, input }) => ({ id, schema, input })),
     onReset: (listener) => {
       resetListeners.add(listener)
       return () => {

@@ -14,7 +14,7 @@ import { z } from 'zod'
 
 const email = ref('')
 const schema = z.object({ email: z.string().email() })
-const { errorsFor, on, state, validate } = useValidation(schema, { email })
+const { commit, errorsFor, hasError, state, validate } = useValidation(schema, { email })
 
 async function submit() {
   const result = await validate()
@@ -35,7 +35,9 @@ async function submit() {
       v-model="email"
       type="email"
       required
-      v-bind="on('email', { describedBy: 'email-errors' })"
+      :aria-invalid="hasError('email')"
+      aria-describedby="email-errors"
+      @blur="commit('email')"
     >
     <div id="email-errors" aria-live="polite">
       <p v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
@@ -49,8 +51,9 @@ async function submit() {
 </template>
 ```
 
-`on('email')` binds blur and change to one value-deduplicated commit without
-owning the model. Use full `validate()` as the submission gate and
+`commit('email')` touches and validates the current value, with deduplication
+and optional debounce. Choose events and accessibility props for your own
+controls; Verific reads the model you already own. Use full `validate()` as the submission gate and
 to populate typed transformed output. The aggregate state guard prevents an
 older async snapshot from reaching application submission. See
 [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)

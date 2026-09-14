@@ -3,19 +3,16 @@ export { useValidation } from './composables/useValidation'
 export type {
   RegistrationResult,
   TargetValidationResult,
-  ValidationBindingOptions,
-  ValidationBindings,
+  ValidationCommitOptions,
   ValidationController,
   ValidationData,
   ValidationFields,
   ValidationGroup,
-  ValidationGroupBindings,
   ValidationOptions,
   ValidationPath,
   ValidationResult,
   ValidationScopeOptions,
   ValidationState,
-  ValidationTrigger,
 } from './composables/useValidation'
 export type {
   DiagnosticMessageAdapter,

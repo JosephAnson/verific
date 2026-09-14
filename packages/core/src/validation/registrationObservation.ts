@@ -631,7 +631,7 @@ function containsAccessor(data: unknown, seen = new WeakSet<object>()): boolean 
   return false
 }
 
-export function snapshotValidationData(data: unknown, seen = new WeakMap<object, unknown>()): unknown {
+function snapshotValidationData(data: unknown, seen = new WeakMap<object, unknown>()): unknown {
   const value = isRef(data) ? unref(data) : data
   if (typeof value !== 'object' || value === null) {
     return value

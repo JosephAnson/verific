@@ -94,8 +94,6 @@ function parseTemplateUnit({ displayName, filename, source, templateOnly = false
   if (compiled.errors.length > 0)
     return
 
-  expandValidationBindings(parsed.descriptor)
-
   return {
     ast: parsed.descriptor.template.ast,
     displayName,
@@ -103,83 +101,6 @@ function parseTemplateUnit({ displayName, filename, source, templateOnly = false
     imports: valueVueImports(parsed.descriptor, displayName, failures),
     key: filename,
   }
-}
-
-// Only expand immutable helpers destructured directly from the imported core
-// composable. Arbitrary object bindings remain unauditable and are rejected.
-export function expandValidationBindings(descriptor) {
-  const script = descriptor.scriptSetup
-  if (!script)
-    return
-  let ast
-  try {
-    ast = babelParse(script.content, { plugins: scriptPlugins(script.lang), sourceType: 'module' })
-  }
-  catch {
-    return
-  }
-  const factories = new Set()
-  for (const node of ast.program.body) {
-    if (node.type !== 'ImportDeclaration' || node.source.value !== '@verific/core' || node.importKind === 'type')
-      continue
-    for (const specifier of node.specifiers) {
-      if (specifier.type === 'ImportSpecifier' && specifier.imported.name === 'useValidation' && specifier.importKind !== 'type')
-        factories.add(specifier.local.name)
-    }
-  }
-  const helpers = new Set()
-  for (const node of ast.program.body) {
-    if (node.type !== 'VariableDeclaration' || node.kind !== 'const')
-      continue
-    for (const declaration of node.declarations) {
-      if (declaration.id.type !== 'ObjectPattern' || declaration.init?.type !== 'CallExpression'
-        || declaration.init.callee.type !== 'Identifier' || !factories.has(declaration.init.callee.name)) {
-        continue
-      }
-      for (const property of declaration.id.properties) {
-        if (property.type === 'ObjectProperty' && !property.computed
-          && ['on', 'group'].includes(property.key.name) && property.value.type === 'Identifier') {
-          helpers.add(property.value.name)
-        }
-      }
-    }
-  }
-  function visit(node, shadowed = false) {
-    // Scope variables can shadow setup bindings; do not infer through slots/loops.
-    shadowed ||= node.props?.some(prop => prop.type === AST_DIRECTIVE && ['for', 'slot'].includes(prop.name)) ?? false
-    if (node.type === AST_ELEMENT && !shadowed) {
-      node.props = node.props.flatMap((prop) => {
-        if (prop.type !== AST_DIRECTIVE || prop.name !== 'bind' || prop.arg || !prop.exp)
-          return [prop]
-        let call
-        try {
-          call = babelParse(`(${prop.exp.content})`, { sourceType: 'module' }).program.body[0]?.expression
-        }
-        catch {
-          return [prop]
-        }
-        if (call?.type !== 'CallExpression' || call.callee.type !== 'Identifier' || !helpers.has(call.callee.name)
-          || call.arguments.length !== 2 || call.arguments[1].type !== 'ObjectExpression') {
-          return [prop]
-        }
-        const options = call.arguments[1].properties
-        if (options.some(option => option.type !== 'ObjectProperty' || option.computed
-          || !['describedBy', 'trigger', 'debounce'].includes(option.key.name))) {
-          return [prop]
-        }
-        const descriptions = options.filter(option => option.key.name === 'describedBy')
-        if (descriptions.length !== 1 || descriptions[0].value.type !== 'StringLiteral')
-          return [prop]
-        return [
-          { ...prop, arg: { type: 4, content: 'aria-invalid', isStatic: true }, exp: { ...prop.exp, content: `${prop.exp.content}['aria-invalid']` } },
-          { type: AST_ATTRIBUTE, name: 'aria-describedby', value: { type: AST_TEXT, content: descriptions[0].value.value }, loc: prop.loc },
-        ]
-      })
-    }
-    for (const child of node.children ?? [])
-      visit(child, shadowed)
-  }
-  visit(descriptor.template.ast)
 }
 
 function hasElement(ast, tag) {

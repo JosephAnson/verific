@@ -41,7 +41,6 @@ export interface ValidationScopeOptions {
 
 export interface ValidationOptions extends ValidationScopeOptions {
   readonly at?: readonly PropertyKey[]
-  readonly validateOn?: ValidationTrigger
   readonly debounce?: number
 }
 
@@ -53,26 +52,8 @@ export interface TargetValidationResult {
   readonly issues: readonly ValidationIssue[]
 }
 
-export type ValidationTrigger = 'blur' | 'change' | 'input' | 'submit'
-
-export interface ValidationBindingOptions {
-  readonly trigger?: ValidationTrigger
+export interface ValidationCommitOptions {
   readonly debounce?: number
-  readonly describedBy?: string
-}
-
-export interface ValidationBindings {
-  readonly 'aria-invalid': boolean
-  readonly 'aria-describedby': string | undefined
-  readonly 'onBlur'?: () => Promise<TargetValidationResult>
-  readonly 'onChange'?: () => Promise<TargetValidationResult>
-  readonly 'onInput'?: () => Promise<TargetValidationResult>
-}
-
-export interface ValidationGroupBindings {
-  readonly 'aria-invalid': boolean
-  readonly 'aria-describedby': string | undefined
-  readonly 'onChange': () => Promise<TargetValidationResult>
 }
 
 export type RegistrationResult<Output>
@@ -108,9 +89,7 @@ export interface ValidationController<Schema extends StandardSchemaV1>
   extends ValidationGroup<ValidationPath<Schema>> {
   readonly ownIssues: ComputedRef<readonly ValidationIssue[]>
   readonly result: Readonly<ShallowRef<RegistrationResult<StandardSchemaV1.InferOutput<Schema>>>>
-  commit: (path: ValidationPath<Schema>, options?: Pick<ValidationBindingOptions, 'debounce'>) => Promise<TargetValidationResult>
-  on: (path: ValidationPath<Schema>, options?: ValidationBindingOptions) => ValidationBindings
-  group: (path: ValidationPath<Schema>, options?: Pick<ValidationBindingOptions, 'debounce' | 'describedBy'>) => ValidationGroupBindings
+  commit: (path: ValidationPath<Schema>, options?: ValidationCommitOptions) => Promise<TargetValidationResult>
 }
 
 const localScopes = new WeakMap<object, InternalValidationScope>()
@@ -159,22 +138,19 @@ export function useValidation<Schema extends StandardSchemaV1>(
   const group = createGroup<ValidationPath<Schema>>(scope, groupPrefix)
   const result = computed(() => registration.readResult() as RegistrationResult<StandardSchemaV1.InferOutput<Schema>>)
   const ownIssues = computed(registration.readIssues)
-  const bindings = createBindings(group, scope, groupPrefix, {
-    validateOn: options.validateOn,
+  const commits = createCommitController(group, scope, groupPrefix, {
     debounce: options.debounce,
   })
 
   if (getCurrentScope()) {
-    onScopeDispose(bindings.dispose)
+    onScopeDispose(commits.dispose)
   }
 
   return {
     ...group,
     ownIssues,
     result: result as unknown as Readonly<ShallowRef<RegistrationResult<StandardSchemaV1.InferOutput<Schema>>>>,
-    commit: bindings.commit,
-    on: bindings.on,
-    group: bindings.group,
+    commit: commits.commit,
   }
 }
 
@@ -188,18 +164,18 @@ interface CommitRecord {
   reject?: (reason: unknown) => void
 }
 
-function createBindings<Path>(
+function createCommitController<Path>(
   group: ValidationGroup<Path>,
   scope: InternalValidationScope,
   prefix: readonly PropertyKey[],
-  defaults: Pick<ValidationOptions, 'validateOn' | 'debounce'>,
+  defaults: ValidationCommitOptions,
 ) {
   const records: CommitRecord[] = []
   let disposed = false
   const stopReset = scope.onReset(cancelQueued)
 
-  function readValue(path: Path): unknown {
-    return scope.captureBindingContext([...prefix, ...selectorSegments(path)])
+  function readContext(path: Path): unknown {
+    return scope.captureCommitContext([...prefix, ...selectorSegments(path)])
   }
 
   function recordFor(path: Path): CommitRecord {
@@ -230,14 +206,14 @@ function createBindings<Path>(
     return pending
   }
 
-  function commit(path: Path, options: Pick<ValidationBindingOptions, 'debounce'> = {}): Promise<TargetValidationResult> {
+  function commit(path: Path, options: ValidationCommitOptions = {}): Promise<TargetValidationResult> {
     if (disposed)
       return Promise.reject(abortError())
     const debounce = options.debounce ?? defaults.debounce ?? 0
     if (!Number.isFinite(debounce) || debounce < 0)
       return Promise.reject(new RangeError('debounce must be a finite non-negative number'))
     const record = recordFor(path)
-    const value = readValue(path)
+    const value = readContext(path)
     const state = group.stateFor(path)
     if (!record.queued && structurallyEqual(record.value, value)) {
       if (record.pending)
@@ -278,34 +254,13 @@ function createBindings<Path>(
       record.resolve = undefined
       record.reject = undefined
       try {
-        void run(path, record, readValue(path)).then(resolve, reject)
+        void run(path, record, readContext(path)).then(resolve, reject)
       }
       catch (reason) {
         reject(reason)
       }
     }, debounce)
     return pending
-  }
-
-  function on(path: Path, options: ValidationBindingOptions = {}): ValidationBindings {
-    const trigger = options.trigger ?? defaults.validateOn
-    const handler = () => commit(path, options)
-    return {
-      get 'aria-invalid'() { return group.hasError(path) },
-      'aria-describedby': options.describedBy,
-      'onBlur': trigger === undefined || trigger === 'blur' ? handler : undefined,
-      'onChange': trigger === undefined || trigger === 'change' ? handler : undefined,
-      'onInput': trigger === 'input' ? handler : undefined,
-    }
-  }
-
-  function validationGroup(path: Path, options: Pick<ValidationBindingOptions, 'debounce' | 'describedBy'> = {}): ValidationGroupBindings {
-    const commitOptions = { debounce: options.debounce ?? defaults.debounce }
-    return {
-      get 'aria-invalid'() { return group.hasError(path) },
-      'aria-describedby': options.describedBy,
-      'onChange': () => commit(path, commitOptions),
-    }
   }
 
   function cancelQueued(reason: Error): void {
@@ -334,7 +289,7 @@ function createBindings<Path>(
     cancelQueued(abortError())
   }
 
-  return { commit, on, group: validationGroup, dispose }
+  return { commit, dispose }
 }
 
 function provideScope(instance: object, options: ValidationScopeOptions): InternalValidationScope {
