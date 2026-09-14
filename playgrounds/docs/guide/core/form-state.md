@@ -34,7 +34,7 @@ patch the DOM is a separate concern.
 | Flag | Meaning |
 | --- | --- |
 | `dirty` | The current raw model differs structurally from its baseline. Reverting a value makes it clean again. |
-| `touched` | Your application explicitly called `touch(path)`. Validation never fabricates interaction. |
+| `touched` | Your application called `touch(path)` or a `commit(path)` began validation. `validate()` and `validateAt()` do not touch fields. |
 | `validated` | An authoritative full or exact-path result covers this state. Only full validation validates the aggregate. |
 | `stale` | The schema identity, registration set or complete raw input differs from the committed snapshot. |
 | `validating` | Authoritative work that can affect this state is pending. Existing committed issues remain visible. |

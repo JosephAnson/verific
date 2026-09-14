@@ -4,41 +4,59 @@ outline: deep
 
 # Why Verific?
 
-Schema libraries validate a value well. Vue forms introduce a coordination problem: the application owns a model, its schemas may be registered by several components, and one submit action must validate them together.
+Verific validates the Vue model you already own and resolves error messages
+through your app's locale system. It fits an existing form, a design system or a
+store where values and control behaviour already have a home.
 
-Verific provides that coordination without replacing the schema library or taking ownership of form values, DOM controls or submission.
+## Your model stays yours
 
-## What Verific owns
+Pass a schema and your refs or reactive object to `useValidation()`. Keep binding
+inputs to those same values. You can add validation to one form at a time without
+replacing the components or moving the model into another state container.
 
-- A **scope** that coordinates one or more registrations.
-- The lifecycle of each schema and model **registration** in that scope.
-- Structured **issues**, exact path selection and safe concurrent validation.
-- A resolver seam that derives ready-to-render **errors** from issues.
-- Each registration's typed, potentially transformed output.
-- Dirty baselines, explicit touch records and validation currency for active registrations.
+Call `commit(path)` from the event that makes sense for each control. Map
+`hasError(path)` and `errorsFor(path)` to your component's own props or slots.
+Verific's core does not infer event names, prop names, value payloads or ARIA
+placement. See [Binding form controls](./core/form-controls) for native and custom
+component examples.
 
-## What the application owns
+## Error messages belong in your app's locale system
 
-- The reactive model and input bindings.
-- When interactions call `touch()`, when validation runs and submit-attempt state.
-- What happens after validation succeeds.
-- Error markup, styling and accessibility.
-- Translation catalogues and locale selection.
+The schema reports a structured issue. Verific preserves that original issue
+and can describe known vendor shapes with a meaning such as `minLength` and
+`{ minimum: 3 }`. A locale adapter then uses that meaning to look up a message
+in your existing translation catalogue.
 
-Dirty state is derived from the application-owned model. Touched state changes only through an explicit `touch(path)` call; validation and DOM events do not infer it. This separation keeps `useValidation` useful with native inputs, a design system or custom field components. Read [Form state](/guide/core/form-state) for the complete lifecycle.
+Your app keeps its locale selection, pluralisation and catalogue conventions.
+Unknown issue shapes fall back to the schema's message, and you can add your own
+normaliser. See [Localisation](./localisation).
 
-## Why Standard Schema?
+## One submit across participating components
 
-[Standard Schema](https://standardschema.dev/) lets Verific accept Zod, Valibot and other compatible schemas through one interface. Verific preserves each original validator issue and adds stable local and scope-resolved paths.
+Components can register their own schema and model in a shared **scope**. One
+`validate()` or `handleSubmit()` action validates the active registrations
+together, even when the form is split into sections. A removed component stops
+contributing, and an independent nested form can create its own scope.
 
-Known issue shapes can also receive a semantic identifier such as `invalidEmail` or `minLength`. Localisation can depend on that meaning instead of vendor-specific prose. Unknown shapes safely fall back to the schema message.
+This requires participating components or a parent that can register their model;
+Verific does not discover hidden values inside arbitrary third-party controls.
+Read [Forms across components](./core/nested-validation) for the composition
+rules, or use an [explicit scope](./core/production-forms#validation-outside-a-component)
+outside a component.
 
-## Why scopes?
+## A deliberate division of responsibilities
 
-A single `useValidation(schema, model)` call creates a scope when no scope is available. Later calls in the same component or its descendants join the nearest scope, so one awaited `validate()` covers the currently registered models.
+| Verific provides | Your application decides |
+| --- | --- |
+| Schema coordination, exact-path issues and safe async results | Model values, schema rules and control components |
+| Dirty baselines, touched state and validation freshness | Interaction timing and when to display messages |
+| Server-issue storage, array metadata helpers and submission state | API response mapping, stable row keys and submission side effects |
+| Semantic issue descriptions and locale adapters | Translation catalogues, locale selection and accessible markup |
 
-Registrations follow Vue's component lifecycle. A removed descendant no longer participates, and a deliberately independent nested form can start a new scope.
+The optional array helpers edit the supplied writable ref when you explicitly
+call insert, remove or move. Validation itself never writes transformed output
+back into the model.
 
-Read [scopes and registrations](/guide/core/nested-validation) for the component-tree rules.
-
-For nested objects, repeated rows, custom cross-field paths and discriminated unions, continue with [Advanced schemas](/guide/core/advanced-schemas).
+Standard Schema support makes schema reuse convenient; it is shared with other
+form libraries. See [Compare Verific](./comparison) for the trade-offs and
+[Getting started](./index) for a working form.

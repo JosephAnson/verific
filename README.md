@@ -4,12 +4,20 @@
   </a>
 </p>
 
-<p align="center">Model-based Standard Schema validation for Vue and Nuxt.</p>
+<p align="center">Your model stays yours. Your error messages speak your app's language.</p>
 
-Verific validates application-owned models with Zod, Valibot or another
-[Standard Schema](https://standardschema.dev/) validator. It composes schemas
-across a component tree and exposes structured issues and ready-to-render error
-strings without introducing another validation-rule language.
+Verific validates the Vue refs and reactive models you already own, then resolves
+error messages through your app's locale system. Keep your components and stores,
+use Zod, Valibot or another [Standard Schema](https://standardschema.dev/) validator,
+and choose when validation runs.
+
+- **Keep your model and UI.** Add validation to existing refs, a reactive model or
+  a store. Connect events, props and slots using your component library's API.
+- **Use your translation catalogue.** Normalise vendor issues into meanings such
+  as `minLength` with `{ minimum: 3 }`, then resolve them through Vue I18n,
+  i18next, Paraglide or your own message resolver.
+- **Submit across components.** Participating components share a validation
+  scope, so one submit can validate their schemas together.
 
 ## Install
 
@@ -27,14 +35,10 @@ import { z } from 'zod'
 
 const email = ref('')
 const schema = z.object({ email: z.string().email() })
-const { commit, errorsFor, hasError, state, validate } = useValidation(schema, { email })
-
-async function submit() {
-  const result = await validate()
-  if (result.success && state.value.validated && !state.value.stale) {
-    // Submit application-owned state.
-  }
-}
+const { commit, errorsFor, hasError, handleSubmit } = useValidation(schema, { email })
+const submit = handleSubmit(() => {
+  // Send email.value to your API after successful, current validation.
+})
 </script>
 
 <template>
@@ -64,12 +68,11 @@ async function submit() {
 </template>
 ```
 
-`commit('email')` touches and validates the current value, with deduplication
-and optional debounce. Choose events and accessibility props for your own
-controls; Verific reads the model you already own. Use `validate()` for submit: it publishes the
-complete form result and owns transformed schema output.
-The aggregate state guard prevents submission from using an older async
-snapshot after the model changes.
+`commit('email')` combines touch and targeted validation, with deduplication and
+optional debounce. `handleSubmit()` runs full validation and manages submission
+state. Use `touch()`, `validateAt()` and `validate()` separately when you need
+more control. Targeted validation still runs the complete matching schemas,
+including async rules, before selecting one path's issues.
 See [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)
 for number, choice, file, repeated-row and custom-control patterns.
 
@@ -81,6 +84,8 @@ input normaliser. See [Rendering errors](https://verific.josephanson.com/guide/c
 ## Learn more
 
 - [Getting started](https://verific.josephanson.com/guide/)
+- [Compare Verific](https://verific.josephanson.com/guide/comparison)
+- [Server issues, submission and arrays](https://verific.josephanson.com/guide/core/production-forms)
 - [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)
 - [Form state](https://verific.josephanson.com/guide/core/form-state)
 - [Advanced schemas](https://verific.josephanson.com/guide/core/advanced-schemas)

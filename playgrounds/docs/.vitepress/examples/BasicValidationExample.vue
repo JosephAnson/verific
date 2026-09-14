@@ -12,7 +12,7 @@ const schema = z.object({
 
 const email = ref('')
 const password = ref('')
-const { errorsFor, hasError, isValidating, issues, result, state, touch, validate, validateAt } = useValidation(schema, { email, password })
+const { commit, errorsFor, hasError, isValidating, issues, result, state, validate } = useValidation(schema, { email, password })
 const outcome = computed(() => {
   const issueCount = issues.value.length
 
@@ -44,11 +44,6 @@ function focusFirstInvalid(path: readonly PropertyKey[] | undefined) {
   }
 }
 
-async function onFieldBlur(path: 'email' | 'password') {
-  touch(path)
-  await validateAt(path)
-}
-
 async function onSubmit() {
   const result = await validate()
   if (!result.success) {
@@ -74,7 +69,7 @@ async function onSubmit() {
             required
             :aria-invalid="hasError('email')"
             aria-describedby="basic-email-errors"
-            @blur="onFieldBlur('email')"
+            @blur="commit('email')"
           >
           <ul id="basic-email-errors" class="verific-example__errors" aria-live="polite" aria-atomic="true">
             <li v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
@@ -93,7 +88,7 @@ async function onSubmit() {
             required
             :aria-invalid="hasError('password')"
             aria-describedby="basic-password-errors"
-            @blur="onFieldBlur('password')"
+            @blur="commit('password')"
           >
           <ul id="basic-password-errors" class="verific-example__errors" aria-live="polite" aria-atomic="true">
             <li v-for="(error, index) in errorsFor('password')" :key="`${index}:${error}`">
