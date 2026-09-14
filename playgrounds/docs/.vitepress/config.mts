@@ -3,6 +3,7 @@ import { defineConfig } from 'vitepress'
 const Start = [
   { text: 'Getting started', link: '/guide/' },
   { text: 'Why Verific?', link: '/guide/why' },
+  { text: 'Compare Verific', link: '/guide/comparison' },
 ]
 
 const CoreConcepts = [
@@ -10,7 +11,7 @@ const CoreConcepts = [
   { text: 'Form state', link: '/guide/core/form-state' },
   { text: 'Server issues, submission and arrays', link: '/guide/core/production-forms' },
   { text: 'Advanced schemas', link: '/guide/core/advanced-schemas' },
-  { text: 'Scopes and registrations', link: '/guide/core/nested-validation' },
+  { text: 'Forms across components', link: '/guide/core/nested-validation' },
   { text: 'Issues and errors', link: '/guide/core/issues-and-errors' },
   { text: 'Submitting validated data', link: '/guide/core/service-layer-to-validation' },
   { text: 'Rendering errors', link: '/guide/components/error-messages' },
@@ -35,8 +36,8 @@ const Reference = [
 ]
 
 export default defineConfig({
-  title: 'Verific - Model-Based Validation for Vue 3',
-  description: 'Model-Based Validation for Vue 3',
+  title: 'Verific - Your model stays yours',
+  description: 'Validate the Vue models you already own, with error messages in your app’s locale system.',
   themeConfig: {
     search: {
       provider: 'local',

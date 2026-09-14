@@ -4,6 +4,13 @@ Verific coordinates model validation and turns validator findings into errors an
 
 ## Language
 
+This glossary defines precise terms for implementation and API reference work.
+Public guides should start with familiar words such as **field**, **form** and
+**error message**. Introduce scope, registration and semantic identifier where
+those distinctions help the reader. Do not require readers to learn the internal
+glossary before evaluating or using the library. The avoidance notes below apply
+when naming the corresponding internal concepts.
+
 **Scope**:
 A group of registrations that are validated together.
 _Avoid_: Form context, validation context

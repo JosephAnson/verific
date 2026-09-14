@@ -4,30 +4,30 @@ layout: home
 
 hero:
   name: "Verific"
-  text: "Model validation for Vue"
-  tagline: "Validate one Vue-owned model or coordinate schemas across a component tree"
+  text: "Your model stays yours"
+  tagline: "Validate the Vue state you already own, with error messages in your app's locale system."
   image:
     src: /logo.png
-    alt: Verific Model-Based Validation
+    alt: Verific
   actions:
     - theme: brand
       text: Getting Started
       link: /guide/
     - theme: alt
-      text: Why Verific?
-      link: /guide/why
+      text: Compare Verific
+      link: /guide/comparison
 
 features:
-  - title: Validate one form
-    details: "Connect a Standard Schema to a Vue-owned model and submit only valid data."
-    link: /guide/#validate-one-model
+  - title: Keep your model and components
+    details: "Add validation to existing refs or stores and connect it through your component library's own API."
+    link: /guide/#basic-validation-demo
     linkText: Start with one form
-  - title: Compose descendant registrations
+  - title: Submit across components
     details: "Collect schemas and models from nested components into one validation scope."
     link: /guide/core/nested-validation
     linkText: Compose a form
-  - title: Render and localise errors
-    details: "Turn structured issues into accessible error messages in the reader's locale."
+  - title: Use your locale system
+    details: "Turn validator issues into semantic identifiers and resolve error messages through your app's translation catalogue."
     link: /guide/localisation
     linkText: Localise errors
   - title: Use Verific with Nuxt

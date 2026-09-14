@@ -1,6 +1,8 @@
 # `@verific/core`
 
-Model-based Standard Schema validation for Vue 3.
+Validation for the Vue models you already own, with error messages in your
+app's locale system. Keep your refs, components and stores; use a Standard Schema
+validator such as Zod or Valibot.
 
 ```bash
 pnpm add @verific/core zod
@@ -14,14 +16,10 @@ import { z } from 'zod'
 
 const email = ref('')
 const schema = z.object({ email: z.string().email() })
-const { commit, errorsFor, hasError, state, validate } = useValidation(schema, { email })
-
-async function submit() {
-  const result = await validate()
-  if (result.success && state.value.validated && !state.value.stale) {
-    // Submit application-owned state.
-  }
-}
+const { commit, errorsFor, hasError, handleSubmit } = useValidation(schema, { email })
+const submit = handleSubmit(() => {
+  // Send email.value to your API after successful, current validation.
+})
 </script>
 
 <template>
@@ -51,11 +49,11 @@ async function submit() {
 </template>
 ```
 
-`commit('email')` touches and validates the current value, with deduplication
-and optional debounce. Choose events and accessibility props for your own
-controls; Verific reads the model you already own. Use full `validate()` as the submission gate and
-to populate typed transformed output. The aggregate state guard prevents an
-older async snapshot from reaching application submission. See
+`commit('email')` touches and validates the current model, with deduplication
+and optional debounce. `handleSubmit()` runs full validation and manages
+submission state. Choose events and accessibility props for your own controls.
+Targeted validation runs complete matching schemas before selecting one path's
+issues. See
 [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)
 for the recommended value and event patterns.
 
@@ -67,6 +65,8 @@ The package exposes these runtime APIs:
 - [`ErrorMessages`](https://verific.josephanson.com/guide/components/error-messages) optionally normalises error inputs.
 
 Read the canonical [Vue guide](https://verific.josephanson.com/guide/),
+[comparison page](https://verific.josephanson.com/guide/comparison),
+[production form guide](https://verific.josephanson.com/guide/core/production-forms),
 form-control
 [binding guide](https://verific.josephanson.com/guide/core/form-controls),
 [form-state guide](https://verific.josephanson.com/guide/core/form-state),
