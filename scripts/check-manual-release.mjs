@@ -37,8 +37,8 @@ const workflowActions = {
   buildPush: 'docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a',
   checkout: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
   dockerLogin: 'docker/login-action@dbcb813823bdd20940b903addbd779551569679f',
-  pnpm: 'pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2',
-  setupBuildx: 'docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f',
+  pnpm: 'pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b',
+  setupBuildx: 'docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e',
   setupNode: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020',
 }
 const allowedWorkflowActions = new Set(Object.values(workflowActions))

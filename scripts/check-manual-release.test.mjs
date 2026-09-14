@@ -58,7 +58,7 @@ with:
   ref: ${dollar}{{ github.sha }}
   persist-credentials: false`
 const manualDockerBuildxStep = `name: Set up Docker Buildx
-uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f`
+uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e`
 const manualDockerLoginStep = `name: Login to DockerHub
 uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
 with:
