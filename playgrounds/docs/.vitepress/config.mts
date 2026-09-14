@@ -2,6 +2,7 @@ import { defineConfig } from 'vitepress'
 
 const Start = [
   { text: 'Getting started', link: '/guide/' },
+  { text: 'API overview', link: '/guide/api' },
   { text: 'Why Verific?', link: '/guide/why' },
   { text: 'Compare Verific', link: '/guide/comparison' },
 ]
@@ -33,6 +34,10 @@ const Reference = [
   { text: 'useValidation', link: '/guide/reference/use-validation' },
   { text: 'Validation lifecycle', link: '/guide/reference/validation-lifecycle' },
   { text: 'Message resolution', link: '/guide/reference/messages' },
+  { text: 'Catalogue messages', link: '/guide/reference/catalogue-messages' },
+  { text: 'Locale adapters', link: '/guide/reference/locale-adapters' },
+  { text: 'createVerific', link: '/guide/reference/create-verific' },
+  { text: 'Troubleshooting', link: '/guide/troubleshooting' },
 ]
 
 export default defineConfig({

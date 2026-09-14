@@ -1,46 +1,12 @@
 <script setup lang="ts">
-import type { IssueNormaliser } from '@verific/core'
+import type { AdvancedInput } from './advanced-schema'
 import { useValidation } from '@verific/core'
 import { ref } from 'vue'
-import { z } from 'zod'
+import { advancedSchema, describeAdvancedIssue } from './advanced-schema'
 
-const commonFields = {
-  profile: z.object({
-    displayName: z.string().min(1, 'Enter a display name'),
-  }),
-  contacts: z.array(z.object({
-    email: z.email('Enter a valid contact email'),
-  })).min(1, 'Keep at least one contact'),
-  password: z.string().min(8, 'Use at least 8 characters'),
-  confirmation: z.string(),
-}
 const fullValidationCount = ref(0)
 
-const schema = z.discriminatedUnion('kind', [
-  z.object({
-    ...commonFields,
-    kind: z.literal('person'),
-    dateOfBirth: z.string().min(1, 'Enter a date of birth'),
-  }),
-  z.object({
-    ...commonFields,
-    kind: z.literal('company'),
-    companyNumber: z.string().min(1, 'Enter a company number'),
-  }),
-]).superRefine((value, context) => {
-  if (value.password !== value.confirmation) {
-    context.addIssue({
-      code: 'custom',
-      message: 'Passwords must match',
-      params: { rule: 'passwordMismatch' },
-      path: ['confirmation'],
-    })
-  }
-})
-
-type FormInput = z.input<typeof schema>
-
-const model = ref<FormInput>({
+const model = ref<AdvancedInput>({
   profile: { displayName: 'Ada' },
   contacts: [{ email: 'ADA@example.com' }],
   password: 'correct-horse',
@@ -48,11 +14,6 @@ const model = ref<FormInput>({
   kind: 'person',
   dateOfBirth: '1815-12-10',
 })
-const describeIssue: IssueNormaliser = ({ raw }) => {
-  const issue = raw as z.ZodIssue & { params?: { rule?: string } }
-  const identifier = issue.params?.rule
-  return identifier ? { identifier, values: {} } : undefined
-}
 const {
   errorsFor,
   hasError,
@@ -60,8 +21,7 @@ const {
   stateFor,
   touch,
   validate,
-  validateAt,
-} = useValidation(schema, model, { describeIssue })
+} = useValidation(advancedSchema, model, { describeIssue: describeAdvancedIssue })
 const announcement = ref('Use full validation after branch or collection structure changes.')
 
 async function runFullValidation() {
@@ -70,7 +30,7 @@ async function runFullValidation() {
 }
 
 async function onKindChange(event: Event) {
-  const kind = (event.currentTarget as HTMLSelectElement).value as FormInput['kind']
+  const kind = (event.currentTarget as HTMLSelectElement).value as AdvancedInput['kind']
   const current = model.value
   model.value = kind === 'person'
     ? {
@@ -117,7 +77,7 @@ async function removeContact(index: number) {
 async function onContactBlur(index: number) {
   const path = ['contacts', index, 'email'] as const
   touch(path)
-  await validateAt(path)
+  await validate(path)
 }
 
 async function onSubmit() {

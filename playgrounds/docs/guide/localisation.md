@@ -46,7 +46,7 @@ Key-first means a form-specific translation in a fallback locale wins over a sha
 The schema remains locale-independent:
 
 ```ts [SignupForm.vue]
-const { errorsFor, hasError, validate, validateAt } = useValidation(schema, form, {
+const { errorsFor, hasError, validate } = useValidation(schema, form, {
   messagePrefix: 'forms.signup',
 })
 ```

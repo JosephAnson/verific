@@ -18,6 +18,10 @@ playgrounds/*/src/playground.ts
 playgrounds/docs/.vitepress/dist
 playgrounds/docs/.vitepress/cache
 
+# Browser-test artefacts
+/playgrounds/docs/test-results/
+/playgrounds/docs/playwright-report/
+
 # nuxt
 .nuxt
 

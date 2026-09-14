@@ -70,7 +70,7 @@ See [Forms across components](./core/nested-validation).
 - You write the mapping from control events and error props to validation.
   Verific does not supply focus management, keyboard behaviour or accessible
   control primitives. A component library may already provide those.
-- `validateAt(path)` and non-deduplicated commits run the complete matching
+- `validate(path)` and non-deduplicated commits run the complete matching
   schemas, including async and cross-field rules. Debounce reduces run frequency;
   it does not turn a large schema into a field-only validator.
 - Array helpers preserve row metadata but structural edits invalidate scope

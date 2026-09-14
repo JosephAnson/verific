@@ -62,10 +62,6 @@ async function onSubmit() {
     : 'The email address changed during validation. Validate again.'
 }
 
-async function changeLocale() {
-  await i18n.changeLanguage(locale.value)
-}
-
 function reportMissing(diagnostic: CatalogueMissingMessageDiagnostic) {
   const attempt = diagnostic.attempts[0]
   const key = attempt?.keys[0] ?? 'unknown key'
@@ -91,7 +87,7 @@ function toggleMissingDemonstration() {
       <div class="verific-example__toolbar">
         <div class="verific-example__field">
           <label for="i18next-locale">Message language</label>
-          <select id="i18next-locale" v-model="locale" data-validation-skip @change="changeLocale">
+          <select id="i18next-locale" v-model="locale" data-validation-skip @change="i18n.changeLanguage(locale)">
             <option value="en">
               English
             </option>

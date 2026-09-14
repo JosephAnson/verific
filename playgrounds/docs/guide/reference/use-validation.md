@@ -10,7 +10,7 @@ application-wide message resolution or issue normalisation.
 Most forms begin with the same destructured interface:
 
 ```ts
-const { commit, errorsFor, hasError, validate, validateAt } = useValidation(schema, model)
+const { commit, errorsFor, hasError, validate } = useValidation(schema, model)
 ```
 
 Use `errorsFor()` and `hasError()` to render one field, call `commit()` after an
@@ -44,7 +44,7 @@ The model can be a reactive object, a ref containing the schema input, or an
 object whose fields are individual refs:
 
 ```ts
-const { errorsFor, hasError, validate, validateAt } = useValidation(schema, {
+const { errorsFor, hasError, validate } = useValidation(schema, {
   email,
   password,
 })
@@ -57,7 +57,7 @@ any group or controller validates every active registration in that scope.
 Use `{ scope: 'new' }` when a nested form must validate independently:
 
 ```ts
-const { errorsFor, hasError, validate, validateAt } = useValidation(schema, model, {
+const { errorsFor, hasError, validate } = useValidation(schema, model, {
   scope: 'new',
 })
 ```
@@ -72,7 +72,7 @@ actions used by most forms:
 | `errorsFor(path)` | `readonly string[]` | Resolved error strings at one exact path. |
 | `hasError(path)` | `boolean` | Whether that exact path has at least one issue. |
 | `touch(path)` | `void` | Record interaction at one exact path. |
-| `validateAt(path)` | `Promise<TargetValidationResult>` | Run complete matching schemas and publish fresh issues only at one exact path. |
+| `validate(path)` | `Promise<ValidationResult>` | Run complete matching schemas and publish fresh issues only at one exact path. |
 | `validate()` | `Promise<ValidationResult>` | Validate every active registration in the scope. |
 | `setIssues(path, issues)` | `void` | Replace server issues at one exact path without replacing schema issues. |
 | `clearIssues(path?)` | `void` | Clear server issues at one exact path, or throughout the scope when omitted. |
@@ -82,7 +82,7 @@ Schema-owning controllers also expose an explicit interaction action:
 
 | Member | Type | Meaning |
 | --- | --- | --- |
-| `commit(path, options?)` | `Promise<TargetValidationResult>` | Touch and validate an application-owned value, deduplicating unchanged commits. |
+| `commit(path, options?)` | `Promise<ValidationResult>` | Touch and validate an application-owned value, deduplicating unchanged commits. |
 | `array(path, items)` | `ValidationArray<Item>` | Insert, remove and move rows in the supplied array ref while keeping row metadata aligned. |
 
 `commit()` accepts `ValidationCommitOptions`, containing an optional `debounce`
@@ -101,15 +101,16 @@ rejected runs therefore allow the next commit to validate again.
 The application chooses which event calls `commit()` and how to present errors.
 Verific does not return control props or event handlers. For submit-only
 validation, call only `validate()`. For separate interaction and validation
-timing, use `touch()` and `validateAt()` independently.
+timing, use `touch()` and `validate()` independently.
 
-Like `validateAt()`, each non-deduplicated commit runs the **complete matching
+Like `validate()`, each non-deduplicated commit runs the **complete matching
 schemas**, including async and cross-field rules, then publishes only the exact
 path's issues. Debounce reduces the number of runs; it does not narrow a schema.
 
-`TargetValidationResult` contains only a readonly `issues` array. It has no
-submission status or transformed output. `ValidationResult` is returned only by
-full `validate()` and exposes the whole-scope `success` status.
+`ValidationResult` contains a readonly `issues` array and a `success` flag. For
+`validate(path)`, success describes the selected path; for full `validate()`, it
+describes the complete scope. Neither targeted nor full results contain
+transformed output; registration `result` owns that output.
 
 ## Advanced state and selectors
 
@@ -134,7 +135,7 @@ validation state, or a single resolved error:
 | Flag | Meaning |
 | --- | --- |
 | `dirty` | Current raw input differs structurally from its baseline; reverting restores clean state. |
-| `touched` | The application called `touch(path)` or a `commit(path)` began validation. `validate()` and `validateAt()` do not touch paths. |
+| `touched` | The application called `touch(path)` or a `commit(path)` began validation. `validate()` and `validate(path)` do not touch paths. |
 | `validated` | An authoritative commit covers the state; only full validation covers the aggregate. |
 | `stale` | The current registration set, schema identity or complete input differs from that commit. |
 | `validating` | Authoritative work that can affect this state is pending. |
@@ -195,7 +196,7 @@ Schema registrations also accept:
 | `debounce` | `number` | Set the default delay in milliseconds for explicit `commit()` calls. Defaults to `0`; each call can override it. Must be finite and non-negative. |
 
 ```ts
-const { errorsFor, hasError, validateAt } = useValidation(addressSchema, address, {
+const { errorsFor, hasError, validate } = useValidation(addressSchema, address, {
   at: ['shipping'],
 })
 ```
@@ -215,7 +216,7 @@ issuesFor(['address', 'postcode']) // the nested field only
 
 Use an array for nested paths; dotted strings are treated as one property key.
 
-`validateAt(path)` uses the same path rules as the selectors. It captures the
+`validate(path)` uses the same path rules as the selectors. It captures the
 complete model and runs each complete matching Standard Schema, so cross-field
 rules still execute. It then publishes only issues whose resolved path exactly
 matches the selected path:
@@ -223,7 +224,7 @@ matches the selected path:
 ```ts
 async function onEmailBlur() {
   touch('email')
-  await validateAt('email')
+  await validate('email')
 }
 ```
 
@@ -243,26 +244,22 @@ change:
 async function onCountryChange(value: string) {
   country.value = value
   touch('country')
-  await validateAt('country')
+  await validate('country')
 }
 ```
 
 Each call returns the fresh issues for the selected exact path:
 
 ```ts
-interface TargetValidationResult {
-  readonly issues: readonly ValidationIssue[]
-}
-
-const { issues } = await validateAt('email')
+const { issues } = await validate('email')
 ```
 
 An empty `issues` array describes only that path, not the complete form. The
-targeted result deliberately has no `success` member. Targeted validation
-updates issue selectors but does not update registration `result` or
-transformed output; full `validate()` owns those submission states and is the
-only submission gate. A programmatic `validateAt()` call does not mark the path
-touched.
+targeted result's `success` flag is true when that exact path has no issues.
+Targeted validation updates issue selectors but does not update registration
+`result` or transformed output; full `validate()` owns those submission states
+and is the only submission gate. A programmatic validation call does not mark
+the path touched.
 
 For a repeated field, include the current array index in the exact path:
 
@@ -270,7 +267,7 @@ For a repeated field, include the current array index in the exact path:
 async function onContactEmailBlur(index: number) {
   const path = ['contacts', index, 'email'] as const
   touch(path)
-  await validateAt(path)
+  await validate(path)
 }
 ```
 
@@ -293,7 +290,7 @@ hasError('postcode')
 errorsFor('postcode')
 stateFor('postcode')
 touch('postcode')
-validateAt('postcode')
+validate('postcode')
 // Matches the scope path ['shipping', 'postcode'].
 ```
 

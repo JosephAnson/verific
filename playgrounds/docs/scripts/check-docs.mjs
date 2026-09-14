@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, extname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { parse } from 'yaml'
 import { auditRenderedValidation } from './rendered-validation-audit.mjs'
 
 async function markdownFiles(directory) {
@@ -306,14 +307,14 @@ function fileForRoute(root, route) {
   if (route.endsWith('/'))
     return join(root, cleanRoute, 'index.md')
 
-  return join(root, `${cleanRoute.replace(/\.md$/, '')}.md`)
+  return join(root, `${cleanRoute.replace(/\.(?:md|html)$/, '')}.md`)
 }
 
 function headingAnchors(markdown) {
   const anchors = new Set()
   const counts = new Map()
 
-  for (const line of withoutFencedCode(markdown).split('\n')) {
+  for (const line of withoutFencedCode(withoutFrontmatter(markdown)).split('\n')) {
     const heading = line.match(/^#{1,6} (.*)$/)?.[1]?.replace(/ #+$/, '')
 
     if (!heading)
@@ -341,7 +342,8 @@ function headingAnchors(markdown) {
 }
 
 function localTarget(sourceFile, href) {
-  const [rawPath, rawAnchor = ''] = href.split('#', 2)
+  const [pathWithQuery, rawAnchor = ''] = href.split('#', 2)
+  const rawPath = decodeURIComponent(pathWithQuery.split('?', 1)[0])
   const anchor = decodeURIComponent(rawAnchor)
 
   if (!rawPath)
@@ -350,11 +352,22 @@ function localTarget(sourceFile, href) {
   if (rawPath.startsWith('/'))
     return { route: rawPath, anchor }
 
-  const sourceRoute = sourceFile.replace(/\.md$/, '')
-  const sourceDirectory = dirname(sourceRoute)
+  const sourceDirectory = dirname(sourceFile)
   const resolvedPath = posix.normalize(posix.join(sourceDirectory.split(sep).join('/'), rawPath))
 
-  return { path: extname(resolvedPath) ? resolvedPath : `${resolvedPath}.md`, anchor }
+  const path = rawPath.endsWith('/')
+    ? posix.join(resolvedPath, 'index.md')
+    : extname(resolvedPath) ? resolvedPath.replace(/\.html$/, '.md') : `${resolvedPath}.md`
+
+  return { path, anchor }
+}
+
+function linkTargetFile(docsRoot, sourceFile, href) {
+  const target = localTarget(sourceFile, href)
+  return {
+    file: target.route ? fileForRoute(docsRoot, target.route) : resolve(target.path),
+    anchor: target.anchor,
+  }
 }
 
 function isExternalLink(href) {
@@ -425,6 +438,30 @@ function withoutFrontmatter(source) {
     return source
   const end = lines.slice(1).findIndex(line => line.trim() === '---')
   return end < 0 ? source : lines.slice(end + 2).join('\n')
+}
+
+function frontmatterData(source) {
+  const lines = source.split('\n')
+  if (lines[0]?.trim() !== '---')
+    return {}
+  const end = lines.slice(1).findIndex(line => line.trim() === '---')
+  if (end < 0)
+    throw new Error('missing closing --- delimiter')
+  return parse(lines.slice(1, end + 1).join('\n')) ?? {}
+}
+
+function navigationLink(item) {
+  return typeof item?.link === 'string' ? item.link : undefined
+}
+
+function frontmatterLinks(frontmatter) {
+  const actions = Array.isArray(frontmatter.hero?.actions) ? frontmatter.hero.actions : []
+  const features = Array.isArray(frontmatter.features) ? frontmatter.features : []
+
+  // VitePress treats string prev/next values as labels, retaining the sidebar target.
+  return [...actions, ...features, frontmatter.prev, frontmatter.next]
+    .map(navigationLink)
+    .filter(link => link !== undefined)
 }
 
 function renderedPageEntry(file, markdown, docsRoot) {
@@ -632,6 +669,7 @@ export async function checkDocs(root, options = {}) {
   ])
   const failures = []
   const content = new Map()
+  const frontmatter = new Map()
   const importedSources = new Map()
   const markdownEntries = new Map()
   const renderedPageEntries = new Map()
@@ -641,6 +679,12 @@ export async function checkDocs(root, options = {}) {
     content.set(file, await readFile(file, 'utf8'))
 
   for (const [file, markdown] of content) {
+    try {
+      frontmatter.set(file, frontmatterData(markdown))
+    }
+    catch (error) {
+      failures.push(`${relative(docsRoot, file)}: invalid frontmatter: ${error.message}`)
+    }
     markdownEntries.set(file, markdownTemplateEntries(file, markdown, docsRoot))
 
     const records = []
@@ -720,26 +764,30 @@ export async function checkDocs(root, options = {}) {
     if (markdown.includes('BaseField'))
       failures.push(`${relative(docsRoot, file)}: examples must not assume an application-specific BaseField component`)
 
-    const scannedLinks = markdownLinks(sourceWithoutCode)
+    const scannedLinks = markdownLinks(withoutFrontmatter(sourceWithoutCode))
 
     for (const link of scannedLinks.malformed)
       failures.push(`${relative(docsRoot, file)}: Markdown link has an unclosed destination: ${link}`)
 
-    for (const href of scannedLinks.links) {
+    for (const href of [...scannedLinks.links, ...frontmatterLinks(frontmatter.get(file) ?? {})]) {
       if (!href || isExternalLink(href))
         continue
 
-      const target = localTarget(file, href)
-      const targetFile = target.route
-        ? fileForRoute(docsRoot, target.route.split(/[?#]/)[0])
-        : resolve(target.path)
+      let target
+      try {
+        target = linkTargetFile(docsRoot, file, href)
+      }
+      catch {
+        failures.push(`${relative(docsRoot, file)}: link contains invalid URL encoding: ${href}`)
+        continue
+      }
 
-      if (!content.has(targetFile)) {
+      if (!content.has(target.file)) {
         failures.push(`${relative(docsRoot, file)}: link target does not exist: ${href}`)
         continue
       }
 
-      if (target.anchor && !headingAnchors(content.get(targetFile)).has(target.anchor))
+      if (target.anchor && !headingAnchors(content.get(target.file)).has(target.anchor))
         failures.push(`${relative(docsRoot, file)}: link anchor does not exist: ${href}`)
     }
 
@@ -761,24 +809,24 @@ export async function checkDocs(root, options = {}) {
   }
   failures.push(...renderedAudit.auditFailures)
 
-  const gettingStarted = content.get(join(guideRoot, 'index.md')) ?? ''
-  const frontmatterEnd = gettingStarted.indexOf('\n---', 4)
-  const frontmatter = frontmatterEnd > 0 ? gettingStarted.slice(4, frontmatterEnd) : ''
-  const frontmatterLines = frontmatter.split('\n')
-  const nextIndex = frontmatterLines.findIndex(line => line.trim() === 'next:')
-  const nextRoute = frontmatterLines
-    .slice(nextIndex + 1)
-    .find(line => line.trim().startsWith('link:'))
-    ?.trim()
-    .slice('link:'.length)
-    .trim()
+  const gettingStartedFile = join(guideRoot, 'index.md')
+  const nextRoute = navigationLink(frontmatter.get(gettingStartedFile)?.next)
 
-  if (!nextRoute)
+  if (!nextRoute) {
     failures.push('guide/index.md: Getting Started must define a next-page link')
-  else if (nextRoute === '/guide/' || nextRoute === '/guide')
-    failures.push('guide/index.md: Getting Started next-page link points to itself')
-  else if (!content.has(fileForRoute(docsRoot, nextRoute)))
-    failures.push(`guide/index.md: Getting Started next-page target does not exist: ${nextRoute}`)
+  }
+  else if (!isExternalLink(nextRoute)) {
+    try {
+      const target = linkTargetFile(docsRoot, gettingStartedFile, nextRoute)
+      if (target.file === gettingStartedFile || nextRoute === '/guide')
+        failures.push('guide/index.md: Getting Started next-page link points to itself')
+      else if (!content.has(target.file))
+        failures.push(`guide/index.md: Getting Started next-page target does not exist: ${nextRoute}`)
+    }
+    catch {
+      // The general link check already reports malformed URL encoding.
+    }
+  }
 
   if (guideRoutes.has('/guide/migration'))
     failures.push('/guide/migration: obsolete migration route must not be authored')
@@ -814,7 +862,20 @@ export default {
   },
 }
 `),
-    writeFile(join(root, 'index.md'), '# Home\n'),
+    writeFile(join(root, 'index.md'), `---
+layout: home
+hero:
+  actions:
+    - text: Getting started
+      link: /guide/
+features:
+  - title: Validate one form
+    link: /guide/#basic-validation-demo
+    linkText: Start with one form
+---
+
+# Home
+`),
     writeFile(join(root, 'guide', 'index.md'), `---
 next:
   text: Details
@@ -829,6 +890,8 @@ import SlottedExample from '../.vitepress/examples/SlottedExample.vue'
 </script>
 
 # Getting started
+
+## Try validation {#basic-validation-demo}
 
 <AccessibleExample />
 <DescendantExample />
@@ -1180,6 +1243,7 @@ const errorsFor = () => []
     assert.deepEqual(await checkDocs(fixtureRoot, { checkAdapterPackages: false }), [])
 
     const configPath = join(fixtureRoot, '.vitepress', 'config.mts')
+    const homePath = join(fixtureRoot, 'index.md')
     const detailsPath = join(fixtureRoot, 'guide', 'details.md')
     const indexPath = join(fixtureRoot, 'guide', 'index.md')
     const examplePath = join(fixtureRoot, '.vitepress', 'examples', 'AccessibleExample.vue')
@@ -1193,6 +1257,7 @@ const errorsFor = () => []
     const slottedPath = join(fixtureRoot, '.vitepress', 'examples', 'SlottedExample.vue')
     const [
       originalConfig,
+      originalHome,
       originalDetails,
       originalIndex,
       originalExample,
@@ -1206,6 +1271,7 @@ const errorsFor = () => []
       originalSlotted,
     ] = await Promise.all([
       readFile(configPath, 'utf8'),
+      readFile(homePath, 'utf8'),
       readFile(detailsPath, 'utf8'),
       readFile(indexPath, 'utf8'),
       readFile(examplePath, 'utf8'),
@@ -1220,6 +1286,7 @@ const errorsFor = () => []
     ])
     const originals = new Map([
       [configPath, originalConfig],
+      [homePath, originalHome],
       [detailsPath, originalDetails],
       [indexPath, originalIndex],
       [examplePath, originalExample],
@@ -1365,6 +1432,55 @@ const errorsFor = () => []
     )
     const compatibleVariants = [
       {
+        name: 'frontmatter relative directory, query and encoded anchor links',
+        original: originalHome,
+        path: homePath,
+        source: originalHome
+          .replace('link: /guide/\n', 'link: ./guide/?from=home\n')
+          .replace('link: /guide/#basic-validation-demo', 'link: ./guide/index.html?from=home#%62asic-validation-demo'),
+      },
+      {
+        name: 'external frontmatter navigation',
+        original: originalHome,
+        path: homePath,
+        source: originalHome
+          .replace('link: /guide/\n', 'link: https://example.com/guide/#external\n')
+          .replace('link: /guide/#basic-validation-demo', 'link: //example.com/guide/#external'),
+      },
+      {
+        name: 'frontmatter prose and unknown link fields are not navigation',
+        original: originalHome,
+        path: homePath,
+        source: originalHome.replace('layout: home', `layout: home
+description: '[Illustrative link](/not-a-page)'
+example:
+  link: /not-a-page`),
+      },
+      {
+        name: 'prev and next strings customise labels',
+        original: originalDetails,
+        path: detailsPath,
+        source: `---\nprev: Previous chapter\nnext: Next chapter\n---\n${originalDetails}`,
+      },
+      {
+        name: 'prev and next can be disabled or inherit sidebar links',
+        original: originalDetails,
+        path: detailsPath,
+        source: `---\nprev: false\nnext: { text: Continue }\n---\n${originalDetails}`,
+      },
+      {
+        name: 'prev and next object links resolve relative and current-page anchors',
+        original: originalDetails,
+        path: detailsPath,
+        source: `---\nprev: { text: Start, link: './#getting-started' }\nnext: { text: Details, link: '#details' }\n---\n${originalDetails}`,
+      },
+      {
+        name: 'Getting Started quoted relative next link includes an anchor',
+        original: originalIndex,
+        path: indexPath,
+        source: originalIndex.replace('link: /guide/details', 'link: "./details.html?from=start#details"'),
+      },
+      {
         name: 'exhaustive conditional slot content',
         original: originalFallbackParent,
         path: fallbackParentPath,
@@ -1454,6 +1570,17 @@ const errorsFor = () => []
     }
 
     const mutations = [
+      { name: 'homepage hero missing route', path: homePath, mutated: originalHome.replace('link: /guide/\n', 'link: /missing\n'), expected: 'index.md: link target does not exist: /missing' },
+      { name: 'homepage hero missing anchor', path: homePath, mutated: originalHome.replace('link: /guide/\n', 'link: /guide/#missing\n'), expected: 'index.md: link anchor does not exist: /guide/#missing' },
+      { name: 'homepage feature stale first-form anchor', path: homePath, mutated: originalHome.replace('#basic-validation-demo', '#validate-one-model'), expected: 'index.md: link anchor does not exist: /guide/#validate-one-model' },
+      { name: 'homepage feature missing route', path: homePath, mutated: originalHome.replace('/guide/#basic-validation-demo', '/missing#basic-validation-demo'), expected: 'index.md: link target does not exist: /missing#basic-validation-demo' },
+      { name: 'frontmatter comments cannot supply page anchors', path: homePath, mutated: originalHome.replace('layout: home', 'layout: home\n# Phantom heading').replace('/guide/#basic-validation-demo', '"#phantom-heading"'), expected: 'index.md: link anchor does not exist: #phantom-heading' },
+      { name: 'previous-page missing relative route', path: detailsPath, mutated: `---\nprev: { text: Previous, link: './missing' }\n---\n${originalDetails}`, expected: 'guide/details.md: link target does not exist: ./missing' },
+      { name: 'previous-page missing anchor', path: detailsPath, mutated: `---\nprev: { text: Previous, link: './#missing' }\n---\n${originalDetails}`, expected: 'guide/details.md: link anchor does not exist: ./#missing' },
+      { name: 'next-page missing route', path: detailsPath, mutated: `---\nnext: { text: Next, link: '/guide/missing' }\n---\n${originalDetails}`, expected: 'guide/details.md: link target does not exist: /guide/missing' },
+      { name: 'next-page missing anchor', path: detailsPath, mutated: `---\nnext: { text: Next, link: '#missing' }\n---\n${originalDetails}`, expected: 'guide/details.md: link anchor does not exist: #missing' },
+      { name: 'invalid frontmatter YAML reports a failure', path: homePath, mutated: originalHome.replace('layout: home', 'layout: [home'), expected: 'index.md: invalid frontmatter:' },
+      { name: 'invalid frontmatter URL encoding reports a failure', path: homePath, mutated: originalHome.replace('#basic-validation-demo', '#%broken'), expected: 'index.md: link contains invalid URL encoding:' },
       { name: 'sidebar source omission', path: configPath, mutated: originalConfig.replace('  { text: \'Details\', link: \'/guide/details\' },\n', ''), expected: 'missing from the sidebar' },
       { name: 'sidebar group omission', path: configPath, mutated: originalConfig.replace('      { text: \'More\', items: More },\n', ''), expected: '/guide/details: guide page is missing from the sidebar' },
       { name: 'missing Markdown link target', path: indexPath, mutated: originalIndex.replace('/guide/details#details', '/guide/missing'), expected: 'link target does not exist' },

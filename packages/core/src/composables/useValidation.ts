@@ -52,10 +52,6 @@ export type ValidationResult
   = | { readonly success: true, readonly issues: readonly ValidationIssue[] }
     | { readonly success: false, readonly issues: readonly ValidationIssue[] }
 
-export interface TargetValidationResult {
-  readonly issues: readonly ValidationIssue[]
-}
-
 export interface ValidationCommitOptions {
   readonly debounce?: number
 }
@@ -90,8 +86,10 @@ export interface ValidationGroup<Path = PropertyKey | readonly PropertyKey[]> {
   stateFor: (path: Path) => ValidationState
   touch: (path: Path) => void
   resetState: () => void
-  validate: () => Promise<ValidationResult>
-  validateAt: (path: Path) => Promise<TargetValidationResult>
+  validate: {
+    (): Promise<ValidationResult>
+    (path: Path): Promise<ValidationResult>
+  }
 }
 
 export interface ValidationController<Schema extends StandardSchemaV1>
@@ -99,7 +97,7 @@ export interface ValidationController<Schema extends StandardSchemaV1>
   array: <Item>(path: ValidationPath<Schema>, items: Ref<Item[]>) => ValidationArray<Item>
   readonly ownIssues: ComputedRef<readonly ValidationIssue[]>
   readonly result: Readonly<ShallowRef<RegistrationResult<StandardSchemaV1.InferOutput<Schema>>>>
-  commit: (path: ValidationPath<Schema>, options?: ValidationCommitOptions) => Promise<TargetValidationResult>
+  commit: (path: ValidationPath<Schema>, options?: ValidationCommitOptions) => Promise<ValidationResult>
 }
 
 export interface StandaloneValidationScope extends ValidationGroup {
@@ -218,10 +216,10 @@ function createController<Schema extends StandardSchemaV1>(
 interface CommitRecord {
   readonly path: readonly PropertyKey[]
   value: unknown
-  pending?: Promise<TargetValidationResult>
-  queued?: Promise<TargetValidationResult>
+  pending?: Promise<ValidationResult>
+  queued?: Promise<ValidationResult>
   timer?: ReturnType<typeof setTimeout>
-  resolve?: (result: TargetValidationResult) => void
+  resolve?: (result: ValidationResult) => void
   reject?: (reason: unknown) => void
 }
 
@@ -249,10 +247,10 @@ function createCommitController<Path>(
     return record
   }
 
-  function run(path: Path, record: CommitRecord, value: unknown): Promise<TargetValidationResult> {
+  function run(path: Path, record: CommitRecord, value: unknown): Promise<ValidationResult> {
     record.value = value
     group.touch(path)
-    const pending = group.validateAt(path)
+    const pending = group.validate(path)
     record.pending = pending
     void pending.then(() => {
       if (record.pending === pending) {
@@ -267,7 +265,7 @@ function createCommitController<Path>(
     return pending
   }
 
-  function commit(path: Path, options: ValidationCommitOptions = {}): Promise<TargetValidationResult> {
+  function commit(path: Path, options: ValidationCommitOptions = {}): Promise<ValidationResult> {
     if (disposed)
       return Promise.reject(abortError())
     const debounce = options.debounce ?? defaults.debounce ?? 0
@@ -281,7 +279,8 @@ function createCommitController<Path>(
         return record.pending
       if (state.validated && !state.stale) {
         group.touch(path)
-        return Promise.resolve({ issues: group.issuesFor(path) })
+        const issues = group.issuesFor(path)
+        return Promise.resolve({ success: issues.length === 0, issues })
       }
     }
 
@@ -302,7 +301,7 @@ function createCommitController<Path>(
 
     const pending = record.queued
       ? record.queued
-      : new Promise<TargetValidationResult>((resolve, reject) => {
+      : new Promise<ValidationResult>((resolve, reject) => {
           record.resolve = resolve
           record.reject = reject
         })
@@ -383,8 +382,8 @@ function createGroup<Path>(scope: InternalValidationScope, prefix: readonly Prop
     return issuesFor(path).map(resolveValidationMessage)
   }
 
-  function validateAt(path: Path): Promise<TargetValidationResult> {
-    return scope.validateAt(resolvePath(path))
+  function validate(path?: Path): Promise<ValidationResult> {
+    return path === undefined ? scope.validate() : scope.validate(resolvePath(path))
   }
 
   return {
@@ -402,8 +401,7 @@ function createGroup<Path>(scope: InternalValidationScope, prefix: readonly Prop
     stateFor: path => scope.stateFor(resolvePath(path)),
     touch: path => scope.touch(resolvePath(path)),
     resetState: scope.resetState,
-    validate: scope.validate,
-    validateAt,
+    validate,
   }
 }
 

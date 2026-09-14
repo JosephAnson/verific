@@ -12,42 +12,19 @@ Use `@verific/i18n` when your locale library can perform an exact key-and-locale
 pnpm add @verific/core @verific/i18n vue zod
 ```
 
-```ts [main.ts]
-import { createVerific } from '@verific/core'
-import { createCatalogueMessages } from '@verific/i18n'
-import { createApp, ref } from 'vue'
-import App from './App.vue'
+<<< ../examples/api/catalogue-messages.ts
 
-const locale = ref('en')
-const catalogues: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  en: { 'errors.invalidEmail': 'Enter a valid email address' },
-  es: { 'errors.invalidEmail': 'Introduce una dirección de correo válida' },
-} as const
+Install the returned resolver and retain its locale source:
 
-const messages = createCatalogueMessages({
-  locales: () => [locale.value, 'en'],
-  lookup(key, selectedLocale) {
-    const message = catalogues[selectedLocale]?.[key]
-    if (message === undefined)
-      return { resolved: false }
+<<< ../examples/api/install-catalogue.ts
 
-    return {
-      resolved: true,
-      message,
-    }
-  },
-}, {
-  fallbackPrefix: 'errors',
-})
-
-createApp(App)
-  .use(createVerific({ messages }))
-  .mount('#app')
-```
+Call `installValidation(app)` before mounting. Both displayed files are included in the documentation TypeScript checks.
 
 `lookup()` must atomically decide exact existence and return the selected translation. Do not let it silently change locale: `createCatalogueMessages()` owns the [shared key-first order](../localisation#the-shared-message-contract).
 
 ## Use the shared options
+
+Configuration fragment for an existing driver:
 
 ```ts
 const messages = createCatalogueMessages(driver, {
@@ -67,14 +44,18 @@ A custom key function is also the place to escape dotted field names or handle s
 
 ## Render errors normally
 
-The adapter is configured once; forms only select their prefix and render the destructured controller members:
+The adapter is configured once; this registration fragment selects a prefix for an existing schema and model:
 
 ```ts
-const { errorsFor, hasError, validate, validateAt } = useValidation(schema, form, {
+const { errorsFor, hasError, validate } = useValidation(schema, form, {
   messagePrefix: 'forms.signup',
 })
 ```
 
 Read a Vue ref or computed locale inside `locales()` to update displayed errors without schema revalidation. For SSR, construct the driver and its mutable locale state within the request or application boundary.
+
+For a complete native form with direct `validate('email')` on blur, use the [localised form example](./vue-i18n#use-it-in-a-form). Touch remains a separate, optional interaction signal.
+
+See the [`createCatalogueMessages` reference](../reference/catalogue-messages) for exact driver types, defaults, returns and lifetime.
 
 If a library cannot provide exact lookup, use a core `MessageResolver` directly and return `undefined` on a miss. See [Message resolution](../reference/messages#messageresolver) for that lower-level contract.

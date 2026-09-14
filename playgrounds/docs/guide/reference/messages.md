@@ -4,7 +4,7 @@ outline: deep
 
 # Message resolution
 
-Verific keeps validation information structured until a caller asks for an error string. This reference covers semantic issue descriptions, resolver precedence and diagnostic adapters. Start with the [localisation adapters overview](/guide/localisation), then choose [Vue I18n](/guide/localisation/vue-i18n), [i18next](/guide/localisation/i18next), [Paraglide](/guide/localisation/paraglide) or a [custom catalogue driver](/guide/localisation/custom-adapters).
+Verific keeps validation information structured until a caller asks for an error string. This page explains that contract and resolver precedence. For setup, start with [localisation adapters](/guide/localisation). For factory parameters and lifetimes, use [`createVerific`](./create-verific), [`createCatalogueMessages`](./catalogue-messages) or the [locale adapter references](./locale-adapters).
 
 ## Pipeline
 
@@ -108,14 +108,7 @@ type MessageResolverFunction = (
 
 Return a string when resolved. An empty string counts as resolved. Return `undefined` to continue the resolver chain; thrown errors surface to the caller.
 
-```ts
-const { validate, errorsFor } = useValidation(schema, form, {
-  messages: ({ identifier, values }) => {
-    const format = catalogue.get(identifier)
-    return format?.(values)
-  },
-})
-```
+The [checked `createVerific` example](./create-verific#install) installs a function resolver. The same resolver can be supplied to a registration's `messages` option.
 
 ### `MessageContext`
 
@@ -142,7 +135,7 @@ A schema-bound call that creates a scope installs its options as root policy; th
 
 ## Diagnostic adapters
 
-An adapter that needs missing-key diagnostics implements the structured form:
+An adapter that needs missing-key diagnostics implements the structured form. These types are exported from `@verific/core`; this is a type signature:
 
 ```ts
 interface DiagnosticMessageAdapter {
@@ -157,32 +150,13 @@ interface DiagnosticMessageAdapter {
 }
 ```
 
-`attempt` remains available for existing adapters; catalogue adapters return the complete ordered `attempts`. Core appends attempts in resolver and array order while continuing through lower-precedence resolvers. If a later resolver succeeds, no diagnostic is emitted. If all resolvers miss, only the highest-precedence adapter that owns `onMissing` is notified. Its diagnostic receives the resolved path, identifier, prefix and the flat key-and-locale history across the complete chain. Duplicates are preserved because they describe real lookups.
+`MessageResolver` is the union of `MessageResolverFunction` and `DiagnosticMessageAdapter`. `MessageResolution` names the return union above; `MissingMessageAttempt` names one locale/key attempt, and `MissingMessageDiagnostic` contains `messagePrefix?`, `path`, `identifier` and readonly `attempts`.
+
+`attempt` remains available for existing adapters; catalogue adapters return the complete ordered `attempts`. Core appends attempts in resolver and array order while continuing through lower-precedence resolvers. If a later resolver succeeds, no diagnostic is emitted. If all resolvers miss, the highest-precedence adapter with both contributed attempts and `onMissing` is notified. Its diagnostic includes the flat key-and-locale history across the complete chain. Duplicates describe real lookups and are preserved.
 
 ## Catalogue adapters
 
-```ts
-createCatalogueMessages(driver, options)
-```
-
-`@verific/i18n` implements the shared catalogue behaviour used by all first-party adapters. A driver supplies the current locale chain and one atomic exact lookup:
-
-```ts
-interface CatalogueMessageDriver {
-  readonly locales: () => readonly string[]
-  readonly lookup: (
-    key: string,
-    locale: string,
-    context: MessageContext,
-  ) => { resolved: true, message: string } | { resolved: false }
-}
-```
-
-| Option | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `fallbackPrefix` | `string` | none | Shared catalogue namespace, for example `errors` |
-| `missing` | `'silent' \| 'warn' \| 'throw' \| callback` | warn outside production; silent in production | Final missing-key policy |
-| `key` | `(context) => readonly string[]` | default candidates | Replaces the ordered key list |
+[`createCatalogueMessages`](./catalogue-messages) implements the shared behaviour used by all first-party locale adapters. Its driver supplies the current locale chain and one exact key/locale lookup; its options control shared keys, custom candidates and missing diagnostics. See the focused reference for [the driver signature](./catalogue-messages#signature-and-driver) and [option types and defaults](./catalogue-messages#options-and-related-types).
 
 ### Default keys
 
@@ -193,25 +167,15 @@ For a message prefix `forms.signup`, resolved path `['email']` and identifier `i
 
 Core then returns the original schema text if the complete resolver chain misses.
 
-The field key is omitted when `messagePrefix` is absent. Only an empty resolved path omits the path segment. String and number segments are dot-joined without escaping; another segment type skips the field key. Use `key` for dotted property names, symbols or a different catalogue layout.
-
-The custom key callback receives the `MessageContext`, `fallbackPrefix` and `defaultKeys`. Its result replaces the defaults; return `[]` to skip this adapter's lookup.
+The field key is omitted without a message prefix. Use a custom `key` callback for dotted property names, symbols or another catalogue layout. See [keys and fallback](./catalogue-messages#keys-and-fallback) for path conversion and candidate replacement.
 
 ### Lookup behaviour
 
-Catalogue resolution:
-
-- tries every locale for the first candidate before moving to the next key;
-- removes duplicate candidates and locales without changing first occurrence order;
-- treats a resolved empty string as a real message;
-- passes `values` and optional `count` to the native adapter;
-- preserves the schema message as the final fallback.
-
-The atomic `lookup()` result distinguishes a translation whose text equals its key from a miss and prevents resource changes between separate existence and translation calls.
+Catalogue resolution tries every locale for one candidate before moving to the next key, removes duplicate keys/locales and accepts a resolved empty string. An exact lookup must distinguish a missing translation from text that happens to equal its key. Native formatting belongs to the [locale adapter](./locale-adapters); the final schema fallback belongs to core.
 
 ### Missing keys
 
-Missing diagnostics run only after key fallback, locale fallback and the complete resolver chain fail. Reports are deduplicated per adapter instance and exact locale/key pair using a finite cache. Eviction bounds memory; it does not guarantee a warning appears only once for the application's lifetime. Explicit `missing: 'silent'` also prevents a lower-precedence adapter from warning about the same final miss. Use `missing: 'throw'` in exercised tests or build-render checks.
+Missing diagnostics run only after key fallback, locale fallback and the complete resolver chain fail. An adapter with `missing: 'silent'` and contributed attempts prevents a lower-precedence adapter from warning about the same final miss. Warn/callback reports use a finite deduplication cache; `'throw'` throws whenever core reports a final miss. See [diagnostics and lifetime](./catalogue-messages#return-value-diagnostics-and-lifetime).
 
 Because resolution is lazy, tests must read `errors`, `errorsFor()` or `errorFor()` after validation to exercise a key. Static catalogue typing and locale-parity checks complement this runtime coverage; they cannot prove dynamic prefixes, paths or validation outcomes.
 
@@ -229,4 +193,4 @@ Calling `errorsFor()` once in script stores a snapshot. Wrap it in `computed(() 
 | `i18nextMessages()` | supplied i18next 26 instance | configured namespace fallback and interpolation | call `dispose()` at the owning application or request boundary |
 | `paraglideMessages()` | required locale getter | concrete generated function signatures | locale source and adapter are application/request owned |
 
-Vue I18n local Composers must set `fallbackRoot = false`. i18next adapters react to language, load and resource-store events. Paraglide adapters require an explicit key-to-generated-function map and never discover exports dynamically. The dedicated adapter guides contain copy-ready setup and SSR examples.
+Vue I18n local Composers must set `fallbackRoot = false`. i18next adapters react to language, load and resource-store events. Paraglide adapters require an explicit key-to-generated-function map. The [factory reference](./locale-adapters) covers exact parameters, related exported types and disposal; the [integration guides](../localisation) provide checked setup and SSR examples.

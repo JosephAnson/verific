@@ -42,13 +42,13 @@ field still causes the next commit to validate cross-field rules again.
 - For native controls, blur suits text-like values and change suits choices,
   pickers and files. These are application choices, not triggers installed by Verific.
 
-Touch is interaction metadata; it does not itself show or hide errors. Calling `validateAt()` programmatically does not mark a path touched. Use `stateFor(path).touched` only when the application deliberately wants interaction-aware presentation. See [Form state](./form-state) for the complete state lifecycle.
+Touch is interaction metadata; it does not itself show or hide errors. Calling `validate()` programmatically does not mark a path touched. Use `stateFor(path).touched` only when the application deliberately wants interaction-aware presentation. See [Form state](./form-state) for the complete state lifecycle.
 
 **Targeted validation runs the complete matching schemas**, including async
 refinements, before selecting one path's issues. Use
 `commit(path, { debounce: 200 })` to reduce repeated runs when appropriate. A
 controller-wide `{ debounce: 200 }` option supplies the default delay for explicit
-commits; `validate()` and `validateAt()` remain immediate.
+commits; `validate()` and `validate()` remain immediate.
 
 ## Try three distinct value shapes {#form-control-demo}
 

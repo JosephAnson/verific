@@ -19,7 +19,7 @@ export interface ValidationSnapshot<Registration extends ObservableRegistration>
 
 export interface ValidationCapture<Registration extends ObservableRegistration> {
   readonly snapshots: readonly ValidationSnapshot<Registration>[]
-  readonly stampSnapshots: readonly ValidationSnapshot<Registration>[]
+  recordValidated: (activeIds: ReadonlySet<symbol>) => void
 }
 
 export interface ObservedValidationState {
@@ -51,15 +51,6 @@ export interface RegistrationObservation<Registration extends ObservableRegistra
   removeRegistration: (id: symbol, registration: Registration) => boolean
   captureAll: () => ValidationCapture<Registration>
   captureAt: (path: readonly PropertyKey[]) => ValidationCapture<Registration>
-  recordFullValidation: (
-    snapshots: readonly ValidationSnapshot<Registration>[],
-    activeIds: ReadonlySet<symbol>,
-  ) => void
-  recordExactValidation: (
-    path: readonly PropertyKey[],
-    snapshots: readonly ValidationSnapshot<Registration>[],
-    activeIds: ReadonlySet<symbol>,
-  ) => void
   stateFor: (path: readonly PropertyKey[]) => ObservedValidationState
   touch: (path: readonly PropertyKey[]) => void
   beginReset: () => boolean
@@ -177,10 +168,17 @@ export function createRegistrationObservation<Registration extends ObservableReg
   }
 
   function captureAt(path: readonly PropertyKey[]): ValidationCapture<Registration> {
-    return capture([...registrations.entries()].filter(([, registration]) => pathStartsWith(path, registration.at)))
+    const targetPath = Object.freeze([...path])
+    return capture(
+      [...registrations.entries()].filter(([, registration]) => pathStartsWith(targetPath, registration.at)),
+      targetPath,
+    )
   }
 
-  function capture(entries: readonly (readonly [symbol, Registration])[]): ValidationCapture<Registration> {
+  function capture(
+    entries: readonly (readonly [symbol, Registration])[],
+    path?: readonly PropertyKey[],
+  ): ValidationCapture<Registration> {
     const snapshots = entries.map(([id, registration]) => ({
       id,
       registration,
@@ -189,9 +187,17 @@ export function createRegistrationObservation<Registration extends ObservableReg
     }))
     rememberSnapshots(snapshots)
     initialiseDeferredBaselines(snapshots)
+    const stampSnapshots = snapshots.map(snapshotForStamp)
     return {
       snapshots,
-      stampSnapshots: snapshots.map(snapshotForStamp),
+      recordValidated(activeIds) {
+        if (path === undefined) {
+          recordFullValidation(stampSnapshots, activeIds)
+        }
+        else {
+          recordExactValidation(path, stampSnapshots, activeIds)
+        }
+      },
     }
   }
 
@@ -545,8 +551,6 @@ export function createRegistrationObservation<Registration extends ObservableReg
     removeRegistration,
     captureAll,
     captureAt,
-    recordFullValidation,
-    recordExactValidation,
     stateFor,
     touch,
     beginReset,

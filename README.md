@@ -77,7 +77,7 @@ const submit = handleSubmit(() => {
 
 `commit('email')` combines touch and targeted validation, with deduplication and
 optional debounce. `handleSubmit()` runs full validation and manages submission
-state. Use `touch()`, `validateAt()` and `validate()` separately when you need
+state. Use `touch()` and `validate(path)` separately when you need
 more control. Targeted validation still runs the complete matching schemas,
 including async rules, before selecting one path's issues.
 See [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)

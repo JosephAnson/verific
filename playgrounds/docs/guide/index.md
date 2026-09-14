@@ -74,7 +74,7 @@ tracks its pending state. The example above uses the lower-level `validate()`
 action so it can also focus the first invalid field.
 
 Targeted validation runs complete matching schemas before selecting one path's
-issues. Use `touch()` and `validateAt()` separately when interaction and
+issues. Use `touch()` and `validate()` separately when interaction and
 validation should happen at different times.
 
 Dirty state needs no event handler: it is derived reactively and becomes clean again when a value returns to its baseline. See [Form state](/guide/core/form-state) for `state`, `stateFor()` and `resetState()`.

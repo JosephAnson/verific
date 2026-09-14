@@ -38,7 +38,6 @@ const {
   stateFor,
   touch,
   validate,
-  validateAt,
 } = useValidation(schema, model)
 const nameState = computed(() => stateFor(['profile', 'name']))
 const emailState = computed(() => stateFor('email'))
@@ -66,11 +65,11 @@ const outcome = computed(() => {
 
 async function onNameBlur() {
   touch(['profile', 'name'])
-  await ignoreResetAbort(validateAt(['profile', 'name']))
+  await ignoreResetAbort(validate(['profile', 'name']))
 }
 
 async function checkEmail() {
-  await ignoreResetAbort(validateAt('email'))
+  await ignoreResetAbort(validate('email'))
 }
 
 function rebaseState() {

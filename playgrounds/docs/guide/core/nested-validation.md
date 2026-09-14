@@ -35,7 +35,7 @@ const { validate, errorsFor } = useValidation(schema, model)
 
 ## Try descendant registration {#scope-composition-demo}
 
-This form's parent calls `useValidation()` without a schema. Its mounted field components each call `useValidation(schema, model)` and automatically join that parent scope.
+This form's parent calls `useValidation()` without a schema. Its mounted field components each call `useValidation(schema, model)` and automatically join that parent scope. It illustrates collection and disposal of registrations; the child-owned values in this demo are not a parent submission payload. Use the parent-owned recipe below when building a split form that saves data.
 
 1. Select **Validate parent form** with both fields empty. The parent reports two committed errors collected from its descendants.
 2. Clear **Include the optional phone component**. The phone component is disposed and its committed issue immediately leaves the parent scope, while the changed registration set makes the earlier full result stale.
@@ -55,105 +55,27 @@ This form's parent calls `useValidation()` without a schema. Its mounted field c
 
 ## Split a form across components
 
-The runnable parent above establishes the shared scope before its descendants are created:
+The parent owns one reactive model and passes each fragment to a child through Vue's `v-model`. Each child uses `defineModel()` to keep that parent connection and registers its fragment with the nearest scope. The scope collects validation results; the parent's model supplies the payload.
 
-```vue [ContactForm.vue]
-<script setup lang="ts">
-import { useValidation } from '@verific/core'
-import ContactDetails from './ContactDetails.vue'
-import PostalAddress from './PostalAddress.vue'
+These schemas deliberately do not transform their inputs, so validated parent-owned strings can be sent directly. If your child schemas transform values, consume their registration outputs explicitly or validate a complete parent schema; the scope does not merge transformed outputs into a payload.
 
-const { issues, state, validate } = useValidation()
+<<< ../examples/workflows/contact.ts
 
-async function submit() {
-  const outcome = await validate()
-  if (outcome.success && state.value.validated && !state.value.stale) {
-    // Submit application-owned state.
-  }
-}
-</script>
+The service posts to your application's `/api/contacts` endpoint. Replace it with your existing client if needed; the optional `save` prop on the parent accepts the same function contract.
 
-<template>
-  <form
-    novalidate
-    aria-describedby="contact-required-instructions"
-    @submit.prevent="submit"
-  >
-    <p id="contact-required-instructions">
-      Complete every required contact and postal address field.
-    </p>
-    <ContactDetails />
-    <PostalAddress />
-    <button type="submit">
-      Submit
-    </button>
-  </form>
+<<< ../examples/workflows/contact-service.ts
 
-  <p aria-live="polite">
-    {{ issues.length ? `${issues.length} validation issue(s)` : '' }}
-  </p>
-</template>
-```
+The parent creates its independent scope before either descendant is set up. Its handler snapshots both fragments, prevents duplicate submissions and rebases only if the raw strings still match after saving.
 
-A descendant registers its own schema and model with the nearest scope:
+<<< ../examples/workflows/ContactForm.vue
 
-```vue [ContactDetails.vue]
-<script setup lang="ts">
-import { useValidation } from '@verific/core'
-import { reactive } from 'vue'
-import { z } from 'zod'
+Each descendant joins that scope rather than creating another one. `at` gives its issues a distinct prefix, while local selectors remain relative to that prefix.
 
-const details = reactive({ email: '' })
-const schema = z.object({ email: z.string().email() })
-const { errorsFor, hasError } = useValidation(schema, details)
-</script>
+<<< ../examples/workflows/ContactDetails.vue
 
-<template>
-  <label for="contact-email">Email</label>
-  <input
-    id="contact-email"
-    v-model="details.email"
-    required
-    :aria-invalid="hasError('email')"
-    :aria-describedby="hasError('email') ? 'contact-email-errors' : undefined"
-  >
-  <div id="contact-email-errors" aria-live="polite">
-    <p v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
-      {{ error }}
-    </p>
-  </div>
-</template>
-```
+<<< ../examples/workflows/PostalAddress.vue
 
-The postal-address descendant follows the same registration pattern:
-
-```vue [PostalAddress.vue]
-<script setup lang="ts">
-import { useValidation } from '@verific/core'
-import { reactive } from 'vue'
-import { z } from 'zod'
-
-const address = reactive({ postcode: '' })
-const schema = z.object({ postcode: z.string().min(1, 'Enter a postcode') })
-const { errorsFor, hasError } = useValidation(schema, address)
-</script>
-
-<template>
-  <label for="postal-postcode">Postcode</label>
-  <input
-    id="postal-postcode"
-    v-model="address.postcode"
-    required
-    :aria-invalid="hasError('postcode')"
-    :aria-describedby="hasError('postcode') ? 'postal-postcode-errors' : undefined"
-  >
-  <div id="postal-postcode-errors" aria-live="polite">
-    <p v-for="(error, index) in errorsFor('postcode')" :key="`${index}:${error}`">
-      {{ error }}
-    </p>
-  </div>
-</template>
-```
+The children validate directly on blur. They do not record touch; add an explicit `touch()` call only if the application uses interaction state. The [save workflow](./service-layer-to-validation) explains pending state, request failures and safe rebasing in more detail.
 
 ## Component-tree rules
 

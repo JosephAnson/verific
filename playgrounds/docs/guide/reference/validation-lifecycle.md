@@ -32,15 +32,27 @@ if (outcome.success && state.value.validated && !state.value.stale) {
 
 ## Targeted validation
 
-Call `touch(path)` and then `validateAt(path)` when an interaction such as blur
-should update one exact field path without replacing unrelated publication:
+Call `validate(path)` when an interaction such as blur should update one exact
+field path without replacing unrelated publication. Native controls can bind it
+directly:
 
 ```ts
-const { errorsFor, hasError, touch, validate, validateAt } = useValidation(schema, model)
+const { errorsFor, hasError, validate } = useValidation(schema, model)
+```
+
+```vue
+<input v-model="model.email" @blur="validate('email')">
+```
+
+Touch is optional and independent. If the application uses touched state, an
+explicit interaction handler can record it before validating:
+
+```ts
+const { touch, validate } = useValidation(schema, model)
 
 async function onEmailBlur() {
   touch('email')
-  const { issues } = await validateAt('email')
+  const { issues, success } = await validate('email')
 }
 ```
 
@@ -49,17 +61,18 @@ model and executes the complete matching Standard Schema registrations, so
 cross-field refinements receive all input. Only fresh issues at the selected
 exact path replace committed issue state; unrelated committed issues remain.
 
-The public targeted result is deliberately issues-only:
+The public targeted result has the same shape as a full result:
 
 ```ts
-interface TargetValidationResult {
-  readonly issues: readonly ValidationIssue[]
-}
+type ValidationResult
+  = | { readonly success: true, readonly issues: readonly ValidationIssue[] }
+    | { readonly success: false, readonly issues: readonly ValidationIssue[] }
 ```
 
-It contains fresh issues only for the selected path. An empty array does not
-approve the complete scope: await full `validate()` and inspect its `success`
-status before submission. `validateAt()` never updates a registration's
+It contains fresh issues only for the selected path, and `success` is true only
+when that selection has no issues. An empty targeted result does not approve the
+complete scope: await full `validate()` and inspect its `success` status before
+submission. `validate(path)` never updates a registration's
 `result` or transformed output. Those remain `idle` until full `validate()` runs
 and remain owned by the latest full validation afterwards. Neither targeted nor
 full validation marks a path touched; programmatic validation therefore remains
@@ -108,6 +121,12 @@ original model. In a scope with more than one registration, `outcome.success`
 describes the whole scope; read each controller's `result` for its
 registration-specific output. The `state` check above ensures that the typed
 output still describes the current model rather than an earlier async snapshot.
+
+Validation does not track the request that follows it. Keep an application-owned
+submission guard active through validation and saving, capture the payload before
+the request, and handle request errors separately. The complete
+[save workflow](../core/service-layer-to-validation) includes those behaviours
+and a safe rebase after success.
 
 ## Input snapshots
 
@@ -181,6 +200,11 @@ error named `AbortError`; later validator fulfilment or rejection cannot
 repopulate state. If any capture throws, the original error is rethrown
 synchronously and no baseline, result, interaction or pending authority changes.
 
+After saving, rebase only if current raw values still match the saved snapshot.
+`resetState()` cannot tell whether a user edited those values during your request;
+it always adopts the current inputs. See
+[Rebase only the values that were saved](../core/service-layer-to-validation#rebase-only-the-values-that-were-saved).
+
 ## Registration disposal
 
 A registration remains active while its Vue effect scope is active. When that
@@ -205,7 +229,8 @@ scope, although application-wide `createVerific` policy remains available.
 ## Failures
 
 Ordinary invalid data resolves rather than rejects: full `validate()` reports
-`success: false`, while `validateAt()` returns the selected issues. Operational
+`success: false`, while `validate(path)` reports `success: false` only when the
+selected path has issues. Operational
 failures reject either promise. Rejections include:
 
 - a schema validator throwing or returning a rejected promise;
@@ -214,7 +239,10 @@ failures reject either promise. Rejections include:
 - an issue normaliser throwing.
 
 The `AbortError` from a successful `resetState()` is expected cancellation, not
-a schema failure.
+a schema failure. However, a schema or network request can independently reject
+with that same name. Ignore it only when your application knows it belongs to
+work it deliberately cancelled; checking `error.name` alone is insufficient in
+a general request handler.
 
 When the authoritative run rejects, its partial work is not committed. Previous
 committed issues and registration results remain available. `isValidating`

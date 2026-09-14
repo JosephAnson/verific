@@ -117,7 +117,7 @@ describe('advanced Standard Schema vendor behaviour', () => {
 
     expectTypeOf(validation.result.value).toEqualTypeOf<RegistrationResult<Output>>()
 
-    await validation.validateAt('quantity')
+    await validation.validate('quantity')
     expect(validation.result.value).toEqual({ status: 'idle' })
 
     await validation.validate()

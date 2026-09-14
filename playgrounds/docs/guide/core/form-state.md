@@ -19,7 +19,6 @@ const {
   stateFor,
   touch,
   validate,
-  validateAt,
 } = useValidation(schema, model)
 ```
 
@@ -27,14 +26,14 @@ const {
 
 For registrations with an established dirty baseline, model changes, `touch()`
 and `resetState()` are reflected by the selectors on the same JavaScript stack.
-When `validate()` or `validateAt()` resolves, its publication is already
+When `validate(path)` or `validate()` resolves, its publication is already
 committed. Reading Verific state never requires `nextTick()`; waiting for Vue to
 patch the DOM is a separate concern.
 
 | Flag | Meaning |
 | --- | --- |
 | `dirty` | The current raw model differs structurally from its baseline. Reverting a value makes it clean again. |
-| `touched` | Your application called `touch(path)` or a `commit(path)` began validation. `validate()` and `validateAt()` do not touch fields. |
+| `touched` | Your application called `touch(path)` or a `commit(path)` began validation. `validate()` and `validate(path)` do not touch fields. |
 | `validated` | An authoritative full or exact-path result covers this state. Only full validation validates the aggregate. |
 | `stale` | The schema identity, registration set or complete raw input differs from the committed snapshot. |
 | `validating` | Authoritative work that can affect this state is pending. Existing committed issues remain visible. |
@@ -42,12 +41,14 @@ patch the DOM is a separate concern.
 ## Try the state lifecycle
 
 1. Edit **Profile name**, then restore `Ada`; the model returns from **Changed** to **Clean**.
-2. Clear and leave **Profile name**. The blur handler calls `touch()` and `validateAt()` explicitly.
+2. Clear and leave **Profile name**. The blur handler calls `touch()` and `validate(path)` explicitly.
 3. Change **Email address**. The name result becomes stale because a complete-schema rule may depend on that sibling.
 4. Select **Use current values as baseline**. Current values stay unchanged while changed, touched, issues and validation history reset.
 5. Select **Validate and transform**, then edit the email. Submission output disappears as soon as the full result becomes stale.
 6. Enter `slow-taken@example.com` and select **Check email**. That special value takes 1.8 seconds, leaving enough time to enter `quick@example.com` and check again. **Checking** remains visible and only the newest exact run commits.
 7. While the slow check is pending, **Use current values as baseline** remains available. It cancels the work without surfacing the expected `AbortError` as an application error.
+
+This state demo deliberately records touch and uses a timer-based schema that never throws its own `AbortError`, so its cancellation helper can recognise reset cancellation by name. Do not copy that assumption into a network-backed schema: associate cancellation with your own reset/request lifecycle before deciding to ignore it.
 
 <FormStateExample />
 
@@ -72,20 +73,20 @@ Computed refs, custom refs and objects with accessor properties are the setup-ti
 - cancels pending full and targeted work with an `AbortError`;
 - leaves the model unchanged.
 
-Use it after loading server data or after a successful save. It is state rebasing, not a form-value reset.
+Use it after loading server data, or after a successful save when the current values still match the values that were saved. It is state rebasing, not a form-value reset. Rebasing unconditionally after a request can mark edits made during that request clean. The [complete save workflow](./service-layer-to-validation#rebase-only-the-values-that-were-saved) captures raw values and checks them before rebasing.
 
 ## Touch and validate on blur
 
-Interaction remains an application decision:
+Interaction remains an application decision. A simple `@blur="validate('email')"` validates without touching. When your UI also uses touched state, deliberately combine both actions:
 
 ```ts
 async function onEmailBlur() {
   touch('email')
-  await validateAt('email')
+  await validate('email')
 }
 ```
 
-Calling `validateAt()` or `validate()` alone never marks a path touched. Controller paths are relative to their `at` prefix; orchestration-scope paths are absolute.
+Calling `validate(path)` or `validate()` alone never marks a path touched. Controller paths are relative to their `at` prefix; orchestration-scope paths are absolute.
 
 ## Current results and submission output
 
@@ -104,3 +105,5 @@ const submission = computed(() => (
 ```
 
 The typed output may differ from the raw model, but Verific never writes the transformation back into application state.
+
+Capture the payload before starting a request, then track request progress with an application-owned `isSubmitting` flag. Verific's `validating` flag covers schema work only. See [Submitting validated data](./service-layer-to-validation) for a complete source-included workflow with duplicate-submit protection, failures and edits during saving.

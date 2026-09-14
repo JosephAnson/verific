@@ -3,7 +3,6 @@ export { createValidationScope, useValidation } from './composables/useValidatio
 export type {
   RegistrationResult,
   StandaloneValidationScope,
-  TargetValidationResult,
   ValidationCommitOptions,
   ValidationController,
   ValidationData,

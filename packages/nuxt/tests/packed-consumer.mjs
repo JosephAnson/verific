@@ -154,7 +154,7 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
     `,
   })
   await assertTypes(directory, `
-    import type { TargetValidationResult, ValidationIssue, ValidationResult, ValidationState } from '@verific/core'
+    import type { ValidationResult, ValidationIssue, ValidationState } from '@verific/core'
     import { ErrorMessages, createVerific, useValidation } from '@verific/core'
     import { reactive } from 'vue'
     createVerific()
@@ -193,7 +193,7 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
     const exactErrors: readonly string[] = validation.errorsFor('email')
     const hasExactError: boolean = validation.hasError('email')
     const fullResult: Promise<ValidationResult> = validation.validate()
-    const targetResult: Promise<TargetValidationResult> = validation.validateAt('email')
+    const targetResult: Promise<ValidationResult> = validation.validate('email')
     validation.touch('email')
     validation.resetState()
     void [aggregateState, exactState, exactIssues, exactErrors, hasExactError, fullResult, targetResult]
@@ -210,7 +210,7 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
       // @ts-expect-error Schema controllers reject unknown top-level keys.
       validation.touch('missing')
       // @ts-expect-error Schema controllers reject unknown top-level keys.
-      validation.validateAt('missing')
+      validation.validate('missing')
       // @ts-expect-error Validation state is readonly.
       aggregateState.dirty = true
     }
@@ -251,11 +251,12 @@ function coreStateExercise() {
       assertState(validation.state.value, { dirty: false }, 'Reverted aggregate state')
       assertState(validation.stateFor('email'), { dirty: false }, 'Reverted email state')
 
-      const targetedResult = await validation.validateAt('email')
+      const targetedResult = await validation.validate('email')
       const emailIssues = validation.issuesFor('email')
       const emailErrors = validation.errorsFor('email')
       if (
-        targetedResult.issues.length !== 1
+        targetedResult.success
+        || targetedResult.issues.length !== 1
         || emailIssues.length !== 1
         || emailIssues[0]?.message !== 'Email is required'
         || emailErrors.length !== 1

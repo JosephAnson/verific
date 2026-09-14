@@ -35,13 +35,13 @@ import { i18n } from './i18next-setup'
 
 const form = reactive({ email: '' })
 const schema = z.object({ email: z.email() })
-const { errorsFor, hasError, state, touch, validate, validateAt } = useValidation(schema, form, {
+const { errorsFor, hasError, state, touch, validate } = useValidation(schema, form, {
   messagePrefix: 'forms.signup',
 })
 
 async function onEmailBlur() {
   touch('email')
-  await validateAt('email')
+  await validate('email')
 }
 
 async function submit() {

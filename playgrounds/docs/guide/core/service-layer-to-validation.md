@@ -4,104 +4,44 @@ outline: deep
 
 # Submitting validated data
 
-Keep network calls separate from validation. Call the service only after the scope succeeds, and use the registration's transformed output when the schema changes its input.
+Keep saving state in your application. Verific validates the model and exposes transformed output; your submit handler owns the request, duplicate-submit guard and request errors.
 
-```ts [user.ts]
-import { z } from 'zod'
+## Complete save workflow
 
-export const userSchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
-  displayName: z.string().trim().min(1),
-})
+These three files form a complete example. The service posts to an application-owned `/api/users` endpoint; implement that endpoint or replace the service with your existing client. The optional `save` prop lets a parent supply that client and lets the example tests control the request without mocking validation.
 
-export type User = z.output<typeof userSchema>
-```
+The schema trims both values and lowercases the email. Input and output types are derived separately even though both contain strings.
 
-```ts [user-service.ts]
-import type { User } from './user'
+<<< ../examples/workflows/user.ts
 
-export async function registerUser(user: User) {
-  const response = await fetch('/api/users', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(user),
-  })
+The service resolves only after a successful response. A network failure or unsuccessful response rejects; neither is converted into a schema issue.
 
-  if (!response.ok)
-    throw new Error('Registration failed')
-}
-```
+<<< ../examples/workflows/user-service.ts
 
-```vue [RegistrationForm.vue]
-<script setup lang="ts">
-import { useValidation } from '@verific/core'
-import { reactive } from 'vue'
-import { userSchema } from './user'
-import { registerUser } from './user-service'
+The form keeps its inputs editable while saving. Its application-owned `isSubmitting` flag covers both validation and the request, including the interval before Vue disables the button.
 
-const form = reactive({ email: '', displayName: '' })
-const { errorsFor, result, state, validate } = useValidation(userSchema, form)
+<<< ../examples/workflows/RegistrationForm.vue
 
-async function submit() {
-  const outcome = await validate()
-  if (
-    !outcome.success
-    || result.value.status !== 'valid'
-    || !state.value.validated
-    || state.value.stale
-  ) {
-    return
-  }
+## Why the submission checks matter
 
-  const user = result.value.value
-  await registerUser(user)
-}
-</script>
+`validate()` reports whole-scope success. The registration's `result` contains its typed transformed output. Check both, plus `state.validated` and `!state.stale`, before capturing the payload: asynchronous validation may have checked an earlier version of the model.
 
-<template>
-  <form novalidate aria-describedby="registration-required-instructions" @submit.prevent="submit">
-    <p id="registration-required-instructions">
-      All fields are required.
-    </p>
-    <label for="email">Email</label>
-    <input
-      id="email"
-      v-model="form.email"
-      type="email"
-      required
-      :aria-invalid="errorsFor('email').length > 0"
-      :aria-describedby="errorsFor('email').length ? 'email-errors' : undefined"
-    >
-    <ul id="email-errors" aria-live="polite">
-      <li v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
-        {{ error }}
-      </li>
-    </ul>
+The payload is copied before the request starts. Editing the raw form while saving therefore cannot change that request's values. Verific never writes the trimmed name or lowercased email back into `form`.
 
-    <label for="display-name">Display name</label>
-    <input
-      id="display-name"
-      v-model="form.displayName"
-      required
-      :aria-invalid="errorsFor('displayName').length > 0"
-      :aria-describedby="errorsFor('displayName').length ? 'display-name-errors' : undefined"
-    >
-    <ul id="display-name-errors" aria-live="polite">
-      <li
-        v-for="(error, index) in errorsFor('displayName')"
-        :key="`${index}:${error}`"
-      >
-        {{ error }}
-      </li>
-    </ul>
+This example has one isolated scope, a fixed schema and two raw string fields. Its shallow copies are complete snapshots for those shapes. For a nested model, copy the fields you send and compare every raw value covered by the intended baseline; copying just the outer object still shares nested references. The [split-form recipe](./nested-validation#split-a-form-across-components) shows an explicit nested copy.
 
-    <button type="submit">
-      Register
-    </button>
-  </form>
-</template>
-```
+## Rebase only the values that were saved
 
-Here the schema trims both values and lowercases the email. `result.value.value` is that typed transformed output. The state guard ensures it still describes the current model if validation was asynchronous. Verific deliberately does not write it back to `form`.
+`resetState()` adopts the **current** model as the dirty baseline. Calling it unconditionally after a successful request could mark newer edits clean even though they were never sent.
 
-The value returned by `validate()` reports whether the whole scope succeeded and contains aggregate issues. The registration's `result` is where its own output lives. The application still decides when to submit and what to do afterwards. Service and network failures are not schema issues; handle them separately.
+The form captures raw fields alongside the transformed payload, then compares those raw fields when the request completes. If they still match, it rebases and reports success. If they differ, it preserves the existing baseline and newer edits, and reports that the earlier values were saved. A later submission can save and rebase the new values.
+
+This is deliberately conservative: it does not try to rebase only part of the form. Dirty state still means a difference from the existing baseline, rather than a comparison with a server record. The example endpoint does not return replacement data; if your server normalises or replaces values, decide how to reconcile its response with current edits before rebasing.
+
+## Pending requests and failures
+
+`isValidating` describes schema work; it stops when validation settles. It does not cover your network request. Keep `isSubmitting` true until the entire operation finishes, and guard inside the handler as well as disabling the button.
+
+On failure, the example leaves both values and their baseline unchanged, shows an application-owned error and enables retry. It also reports request `AbortError`s: an error with that name does not prove that Verific reset the validation state. Ignore cancellation only when your application can associate it with an operation it deliberately cancelled.
+
+For reset behaviour and validation failures, see [Validation lifecycle](../reference/validation-lifecycle#failures). For a symptom checklist, see [Troubleshooting](../troubleshooting).

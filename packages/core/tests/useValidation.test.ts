@@ -1,6 +1,6 @@
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 import type { App, Component } from 'vue'
-import type { DiagnosticMessageAdapter, IssueNormaliser, MessageContext, TargetValidationResult, ValidationController, ValidationGroup, ValidationIssue, ValidationResult, ValidationState } from '../src/main'
+import type { DiagnosticMessageAdapter, IssueNormaliser, MessageContext, ValidationController, ValidationGroup, ValidationIssue, ValidationResult, ValidationState } from '../src/main'
 import process from 'node:process'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { computed, createApp, customRef, defineComponent, h, isReadonly, nextTick, reactive, ref, shallowRef, watch } from 'vue'
@@ -380,18 +380,16 @@ describe('targeted validation', () => {
     const schema = createSchema<typeof model>('test', validator)
     const mounted = mountValidation(() => useValidation(schema, model), false)
 
-    const targeted = mounted.value.validateAt('confirmation')
-    expectTypeOf(targeted).toEqualTypeOf<Promise<TargetValidationResult>>()
+    const targeted = mounted.value.validate('confirmation')
+    expectTypeOf(targeted).toEqualTypeOf<Promise<ValidationResult>>()
     expectTypeOf(mounted.value.validate).returns.toEqualTypeOf<Promise<ValidationResult>>()
     const targetedResult = await targeted
     expect(targetedResult).toMatchObject({
+      success: false,
       issues: [expect.objectContaining({ message: 'Does not match' })],
     })
-    expect(targetedResult).not.toHaveProperty('success')
-    expectTypeOf(targetedResult).toEqualTypeOf<TargetValidationResult>()
+    expectTypeOf(targetedResult).toEqualTypeOf<ValidationResult>()
     if (false) {
-      // @ts-expect-error Targeted validation does not expose submission authority.
-      void targetedResult.success
       // @ts-expect-error Targeted issue collections are readonly.
       targetedResult.issues.push(targetedResult.issues[0]!)
     }
@@ -400,10 +398,10 @@ describe('targeted validation', () => {
     expect(mounted.value.errors.value).toEqual(['Does not match'])
     expect(mounted.value.ownIssues.value).toEqual(mounted.value.issues.value)
     expect(mounted.value.result.value).toEqual({ status: 'idle' })
-    expectTypeOf(mounted.value.validateAt).parameter(0).toEqualTypeOf<'password' | 'confirmation' | 'profile' | readonly PropertyKey[]>()
+    expectTypeOf(mounted.value.validate).parameter(0).toEqualTypeOf<'password' | 'confirmation' | 'profile' | readonly PropertyKey[] | undefined>()
     if (false) {
       // @ts-expect-error Schema controllers reject unknown top-level keys.
-      void mounted.value.validateAt('missing')
+      void mounted.value.validate('missing')
     }
   })
 
@@ -426,7 +424,7 @@ describe('targeted validation', () => {
     const retainedPasswordIssue = mounted.value.issuesFor('password')[0]
 
     email.value = 'invalid@example.com'
-    await expect(mounted.value.validateAt('email')).resolves.toMatchObject({
+    await expect(mounted.value.validate('email')).resolves.toMatchObject({
       issues: [{ message: 'Email invalid' }],
     })
 
@@ -435,7 +433,7 @@ describe('targeted validation', () => {
     expect(mounted.value.issuesFor('password')[0]).toBe(retainedPasswordIssue)
 
     email.value = 'valid@example.com'
-    await expect(mounted.value.validateAt('email')).resolves.toEqual({ issues: [] })
+    await expect(mounted.value.validate('email')).resolves.toEqual({ success: true, issues: [] })
 
     expect(mounted.value.errors.value).toEqual(['Name required', 'Password required'])
     expect(mounted.value.issuesFor('name')[0]).toBe(retainedNameIssue)
@@ -454,7 +452,7 @@ describe('targeted validation', () => {
       return shipping
     }, false)
 
-    await mounted.value.validateAt('postcode')
+    await mounted.value.validate('postcode')
 
     expect(shippingValidator).toHaveBeenCalledOnce()
     expect(billingValidator).not.toHaveBeenCalled()
@@ -465,9 +463,9 @@ describe('targeted validation', () => {
     const schema = createSchema<unknown>('test', () => ({ issues: [{ message: 'Shipping invalid' }] }))
     const mounted = mountValidation(() => useValidation(schema, {}, { at: ['shipping'] }), false)
 
-    const result = await mounted.value.validateAt([])
+    const result = await mounted.value.validate([])
 
-    expect(result).toEqual({ issues: mounted.value.issuesFor([]) })
+    expect(result).toEqual({ success: false, issues: mounted.value.issuesFor([]) })
     expect(mounted.value.errorsFor([])).toEqual(['Shipping invalid'])
     expect(mounted.value.issues.value[0]?.path).toEqual(['shipping'])
     expect(mounted.value.result.value).toEqual({ status: 'idle' })
@@ -480,9 +478,9 @@ describe('targeted validation', () => {
     }))
     const mounted = mountValidation(() => useValidation(schema, { [field]: '' }), false)
 
-    const result = await mounted.value.validateAt(field)
+    const result = await mounted.value.validate(field)
 
-    expect(result).toEqual({ issues: mounted.value.issuesFor(field) })
+    expect(result).toEqual({ success: false, issues: mounted.value.issuesFor(field) })
     expect(mounted.value.errorsFor(field)).toEqual(['Symbol field invalid'])
     expect(mounted.value.issues.value[0]?.path).toEqual([field])
   })
@@ -496,9 +494,9 @@ describe('targeted validation', () => {
     }))
     const mounted = mountValidation(() => useValidation(schema, model), false)
 
-    const emailRun = mounted.value.validateAt('email')
+    const emailRun = mounted.value.validate('email')
     model.email = 'other'
-    const passwordRun = mounted.value.validateAt('password')
+    const passwordRun = mounted.value.validate('password')
     resolvers.get('password')?.({ issues: [{ message: 'Password issue', path: ['password'] }] })
     await passwordRun
     resolvers.get('email')?.({ issues: [{ message: 'Email issue', path: ['email'] }] })
@@ -513,13 +511,13 @@ describe('targeted validation', () => {
     const schema = createSchema<{ email: string }>('test', value => new Promise(resolve => resolvers.set(value.email, resolve)))
     const mounted = mountValidation(() => useValidation(schema, { email }), false)
 
-    const older = mounted.value.validateAt('email')
+    const older = mounted.value.validate('email')
     email.value = 'newer'
-    const newer = mounted.value.validateAt('email')
+    const newer = mounted.value.validate('email')
     resolvers.get('newer')?.({ issues: [{ message: 'Current', path: ['email'] }] })
 
     const result = await newer
-    expect(result).toEqual({ issues: mounted.value.issuesFor('email') })
+    expect(result).toEqual({ success: false, issues: mounted.value.issuesFor('email') })
     await expect(older).resolves.toEqual(result)
     resolvers.get('older')?.({ issues: [{ message: 'Stale', path: ['email'] }] })
     await Promise.resolve()
@@ -537,11 +535,11 @@ describe('targeted validation', () => {
     })
     const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
 
-    const target = mounted.value.validateAt('email')
+    const target = mounted.value.validate('email')
     const full = mounted.value.validate()
 
     await expect(full).resolves.toMatchObject({ success: false })
-    await expect(target).resolves.toEqual({ issues: mounted.value.issuesFor('email') })
+    await expect(target).resolves.toEqual({ success: false, issues: mounted.value.issuesFor('email') })
     resolveTarget({ issues: [{ message: 'Stale target', path: ['email'] }] })
     await Promise.resolve()
     expect(mounted.value.errors.value).toEqual(['Full issue'])
@@ -560,7 +558,7 @@ describe('targeted validation', () => {
     const mounted = mountValidation(() => useValidation(schema, { email }), false)
 
     const full = mounted.value.validate()
-    const target = mounted.value.validateAt('email')
+    const target = mounted.value.validate('email')
     email.value = 'after'
     resolveFull({ value: { email: 'before' } })
 
@@ -585,7 +583,7 @@ describe('targeted validation', () => {
     const retained = mounted.value.issues.value
     rejectTarget = true
 
-    await expect(mounted.value.validateAt('email')).rejects.toThrow('Unavailable')
+    await expect(mounted.value.validate('email')).rejects.toThrow('Unavailable')
     expect(mounted.value.issues.value).toEqual(retained)
   })
 
@@ -607,11 +605,11 @@ describe('targeted validation', () => {
     })
     mountComponent(Parent, false)
 
-    const target = root.validateAt('email')
+    const target = root.validate('email')
     showChild.value = false
     await nextTick()
 
-    await expect(target).resolves.toEqual({ issues: [] })
+    await expect(target).resolves.toEqual({ success: true, issues: [] })
     expect(root.isValidating.value).toBe(false)
   })
 
@@ -623,7 +621,7 @@ describe('targeted validation', () => {
       messages: () => locale.value === 'en' ? 'Invalid email' : 'Correo no válido',
     }), false)
 
-    await mounted.value.validateAt('email')
+    await mounted.value.validate('email')
     locale.value = 'es'
 
     expect(mounted.value.errorsFor('email')).toEqual(['Correo no válido'])
@@ -636,7 +634,7 @@ describe('targeted validation', () => {
       ? { value: { email: value.email, normalised: true } }
       : { issues: [{ message: 'Invalid email', path: ['email'] }] })
     const mounted = mountValidation(() => useValidation(schema, { email }), false)
-    await mounted.value.validateAt('email')
+    await mounted.value.validate('email')
 
     expect(mounted.value.result.value).toEqual({ status: 'idle' })
     email.value = 'valid'
@@ -662,7 +660,7 @@ describe('targeted validation', () => {
     const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
 
     const full = mounted.value.validate()
-    const target = mounted.value.validateAt('email')
+    const target = mounted.value.validate('email')
     expect(mounted.value.isValidating.value).toBe(true)
 
     resolveFull({ value: { email: '' } })
@@ -1149,9 +1147,9 @@ describe('form state', () => {
     }, false)
 
     throwOnRead = true
-    let validation!: Promise<TargetValidationResult>
+    let validation!: Promise<ValidationResult>
     expect(() => {
-      validation = mounted.value.validateAt('email')
+      validation = mounted.value.validate('email')
     }).not.toThrow()
     await expect(validation).rejects.toBe(observationFailure)
 
@@ -1159,7 +1157,7 @@ describe('form state', () => {
     expect(mounted.value.isValidating.value).toBe(false)
     expect(mounted.value.state.value.validating).toBe(false)
     expect(mounted.value.stateFor('email').validating).toBe(false)
-    await expect(mounted.value.validateAt('email')).resolves.toEqual({ issues: [] })
+    await expect(mounted.value.validate('email')).resolves.toEqual({ success: true, issues: [] })
     expect(validator).toHaveBeenCalledOnce()
   })
 
@@ -1306,7 +1304,7 @@ describe('form state', () => {
     })
     mountComponent(Parent, false)
 
-    await child.validateAt('postcode')
+    await child.validate('postcode')
     expect(child.stateFor('postcode').touched).toBe(false)
 
     root.touch(['billing', 'postcode'])
@@ -1346,7 +1344,7 @@ describe('form state', () => {
     const model = reactive({ email: '', password: '' })
     const mounted = mountValidation(() => useValidation(schema, model), false)
 
-    await mounted.value.validateAt('email')
+    await mounted.value.validate('email')
 
     expect(mounted.value.state.value.validated).toBe(false)
     expect(mounted.value.stateFor('email')).toMatchObject({ validated: true, stale: false, touched: false })
@@ -1411,6 +1409,34 @@ describe('form state', () => {
     expect(mounted.value.state.value.stale).toBe(true)
     model.profile.name = 'Ada'
     expect(mounted.value.state.value.stale).toBe(false)
+  })
+
+  it('isolates targeted freshness from mutations to the validator input', async () => {
+    const model = reactive({ profile: { name: 'Ada' }, email: 'ada@example.com' })
+    let captured!: typeof model
+    const schema = createSchema<typeof model>('test', (value) => {
+      captured = value
+      value.profile.name = 'Mutated during validation'
+      return { issues: [{ message: 'Check the name', path: ['profile', 'name'] }] }
+    })
+    const mounted = mountValidation(() => useValidation(schema, model), false)
+
+    await mounted.value.validate(['profile', 'name'])
+
+    expect(model.profile.name).toBe('Ada')
+    expect(mounted.value.errorsFor(['profile', 'name'])).toEqual(['Check the name'])
+    expect(mounted.value.state.value).toMatchObject({ dirty: false, validated: false })
+    expect(mounted.value.stateFor(['profile', 'name'])).toMatchObject({ validated: true, stale: false })
+    expect(mounted.value.stateFor('email').validated).toBe(false)
+    expect(mounted.value.result.value).toEqual({ status: 'idle' })
+
+    captured.profile.name = 'Mutated after validation'
+    expect(mounted.value.stateFor(['profile', 'name']).stale).toBe(false)
+
+    model.profile.name = 'Mutated after validation'
+    expect(mounted.value.stateFor(['profile', 'name'])).toMatchObject({ dirty: true, stale: true })
+    model.profile.name = 'Ada'
+    expect(mounted.value.stateFor(['profile', 'name'])).toMatchObject({ dirty: false, stale: false })
   })
 
   it('invalidates validation history when matching registrations are added or disposed', async () => {
@@ -1545,12 +1571,12 @@ describe('form state', () => {
     }))
     const mounted = mountValidation(() => useValidation(schema, { email: '', password: '' }), false)
 
-    const email = mounted.value.validateAt('email')
+    const email = mounted.value.validate('email')
     expect(mounted.value.state.value.validating).toBe(true)
     expect(mounted.value.stateFor('email').validating).toBe(true)
     expect(mounted.value.stateFor('password').validating).toBe(false)
 
-    const password = mounted.value.validateAt('password')
+    const password = mounted.value.validate('password')
     expect(mounted.value.stateFor('email').validating).toBe(true)
     expect(mounted.value.stateFor('password').validating).toBe(true)
     resolvers[0]?.({ value: { email: '', password: '' } })
@@ -1688,13 +1714,13 @@ describe('form state', () => {
     const captureFailure = new Error('Later reset capture failed')
     let resetCapture = false
     let validation!: ReturnType<typeof useValidation<typeof schema>>
-    let reentrantValidation!: Promise<TargetValidationResult>
+    let reentrantValidation!: Promise<ValidationResult>
     let resolvePending!: (result: StandardSchemaV1.Result<{ email: string, code: string }>) => void
     const model = {
       get email() {
         if (resetCapture) {
           validation.touch('email')
-          reentrantValidation = validation.validateAt('email')
+          reentrantValidation = validation.validate('email')
         }
         return 'safe@example.com'
       },
@@ -1730,7 +1756,7 @@ describe('form state', () => {
 
   it('rejects validation started synchronously during reset publication', async () => {
     const schema = createSchema<{ email: string }>('test', value => ({ value }))
-    let blockedValidation!: Promise<TargetValidationResult>
+    let blockedValidation!: Promise<ValidationResult>
     const mounted = mountValidation(() => {
       const validation = useValidation(schema, { email: 'safe@example.com' })
       let validateOnReset = false
@@ -1739,7 +1765,7 @@ describe('form state', () => {
         (result) => {
           if (validateOnReset && result.status === 'idle') {
             validateOnReset = false
-            blockedValidation = validation.validateAt('email')
+            blockedValidation = validation.validate('email')
           }
         },
         { flush: 'sync' },
@@ -1849,13 +1875,13 @@ describe('form state', () => {
     const observationFailure = new Error('Middle target start observation failed')
     const resolvers: Array<(result: StandardSchemaV1.Result<{ email: string }>) => void> = []
     let validation!: ValidationGroup<'email'>
-    let newest!: Promise<TargetValidationResult>
+    let newest!: Promise<ValidationResult>
     let startNewest = false
     const model = {
       get email() {
         if (startNewest) {
           startNewest = false
-          newest = validation.validateAt('email')
+          newest = validation.validate('email')
           throw observationFailure
         }
         return 'safe@example.com'
@@ -1870,18 +1896,18 @@ describe('form state', () => {
       return validation
     }, false)
 
-    const oldest = mounted.value.validateAt('email')
+    const oldest = mounted.value.validate('email')
     startNewest = true
-    let adopting!: Promise<TargetValidationResult>
+    let adopting!: Promise<ValidationResult>
     expect(() => {
-      adopting = mounted.value.validateAt('email')
+      adopting = mounted.value.validate('email')
     }).not.toThrow()
 
     resolvers[1]?.({ value: { email: 'safe@example.com' } })
     await expect(Promise.all([oldest, adopting, newest])).resolves.toEqual([
-      { issues: [] },
-      { issues: [] },
-      { issues: [] },
+      { success: true, issues: [] },
+      { success: true, issues: [] },
+      { success: true, issues: [] },
     ])
     expect(mounted.value.stateFor('email').validating).toBe(false)
 
@@ -1897,13 +1923,13 @@ describe('form state', () => {
     const resolvers = new Map<string, (result: StandardSchemaV1.Result<{ email: string }>) => void>()
     let email = 'oldest'
     let startTarget = false
-    let target!: Promise<TargetValidationResult>
+    let target!: Promise<ValidationResult>
     let validation!: ValidationGroup<'email'>
     const model = {
       get email() {
         if (startTarget) {
           startTarget = false
-          target = validation.validateAt('email')
+          target = validation.validate('email')
           throw observationFailure
         }
         return email
@@ -1937,6 +1963,7 @@ describe('form state', () => {
 
     resolvers.get('newest')?.({ issues: [{ message: 'New target', path: ['email'] }] })
     await expect(target).resolves.toEqual({
+      success: false,
       issues: [expect.objectContaining({ message: 'New target' })],
     })
     expect(mounted.value.errorsFor('email')).toEqual(['New target'])
@@ -1946,7 +1973,7 @@ describe('form state', () => {
     const captureFailure = new Error('Middle target capture failed')
     let throwOnRead = false
     let startNewest = false
-    let newest!: Promise<TargetValidationResult>
+    let newest!: Promise<ValidationResult>
     let resolveOldest!: (result: StandardSchemaV1.Result<{ email: string }>) => void
     let validation!: ValidationGroup<'email'>
     const model = {
@@ -1969,7 +1996,7 @@ describe('form state', () => {
         (validating) => {
           if (!validating && startNewest) {
             startNewest = false
-            newest = validation.validateAt('email')
+            newest = validation.validate('email')
           }
         },
         { flush: 'sync' },
@@ -1977,15 +2004,15 @@ describe('form state', () => {
       return validation
     }, false)
 
-    const oldest = mounted.value.validateAt('email')
+    const oldest = mounted.value.validate('email')
     throwOnRead = true
     startNewest = true
-    const middle = mounted.value.validateAt('email')
+    const middle = mounted.value.validate('email')
 
     await expect(middle).rejects.toBe(captureFailure)
     await expect(Promise.all([oldest, newest])).resolves.toEqual([
-      { issues: [] },
-      { issues: [] },
+      { success: true, issues: [] },
+      { success: true, issues: [] },
     ])
     expect(mounted.value.stateFor('email').validating).toBe(false)
 
@@ -2018,16 +2045,16 @@ describe('form state', () => {
       return validation
     }, false)
 
-    const targeted = mounted.value.validateAt('email')
+    const targeted = mounted.value.validate('email')
     const full = mounted.value.validate()
     expect(resolvers).toHaveLength(2)
 
     throwOnRead = true
-    await expect(mounted.value.validateAt('email')).rejects.toBe(observationFailure)
+    await expect(mounted.value.validate('email')).rejects.toBe(observationFailure)
 
     resolvers[1]?.({ value: { email: 'safe@example.com' } })
     await expect(Promise.all([targeted, full])).resolves.toEqual([
-      { issues: [] },
+      { success: true, issues: [] },
       { success: true, issues: [] },
     ])
 
@@ -2041,18 +2068,18 @@ describe('form state', () => {
     let startAdopter = false
     let failLaterStart = false
     let validation!: ValidationGroup<'email'>
-    let adopter!: Promise<TargetValidationResult>
-    let afterAdopter!: Promise<TargetValidationResult>
-    let failed!: Promise<TargetValidationResult>
+    let adopter!: Promise<ValidationResult>
+    let afterAdopter!: Promise<ValidationResult>
+    let failed!: Promise<ValidationResult>
     let resolveAdopter!: (result: StandardSchemaV1.Result<{ email: string }>) => void
     const model = {
       get email() {
         if (startAdopter) {
           startAdopter = false
-          adopter = validation.validateAt('email')
+          adopter = validation.validate('email')
           afterAdopter = adopter.then((result) => {
             failLaterStart = true
-            failed = validation.validateAt('email')
+            failed = validation.validate('email')
             void failed.catch(() => {})
             return result
           })
@@ -2074,13 +2101,13 @@ describe('form state', () => {
     }, false)
 
     startAdopter = true
-    const predecessor = mounted.value.validateAt('email')
+    const predecessor = mounted.value.validate('email')
     resolveAdopter({ value: { email: 'safe@example.com' } })
 
-    await expect(adopter).resolves.toEqual({ issues: [] })
-    await expect(afterAdopter).resolves.toEqual({ issues: [] })
+    await expect(adopter).resolves.toEqual({ success: true, issues: [] })
+    await expect(afterAdopter).resolves.toEqual({ success: true, issues: [] })
     await expect(failed).rejects.toBe(observationFailure)
-    await expect(predecessor).resolves.toEqual({ issues: [] })
+    await expect(predecessor).resolves.toEqual({ success: true, issues: [] })
     expect(mounted.value.stateFor('email').validating).toBe(false)
   })
 
@@ -2153,7 +2180,7 @@ describe('form state', () => {
       return validation
     }, false)
 
-    const targeted = mounted.value.validateAt('email')
+    const targeted = mounted.value.validate('email')
     email.value = 'middle'
     const middle = mounted.value.validate()
     startNewest = true
@@ -2167,7 +2194,7 @@ describe('form state', () => {
       issues: [expect.objectContaining({ message: 'Middle' })],
     })
     await expect(newest).resolves.toEqual({ success: true, issues: [] })
-    await expect(targeted).resolves.toEqual({ issues: [] })
+    await expect(targeted).resolves.toEqual({ success: true, issues: [] })
 
     resolvers.get('target')?.({ issues: [{ message: 'Late target', path: ['email'] }] })
     await Promise.resolve()
@@ -2341,13 +2368,13 @@ describe('form state', () => {
       return validation
     }, false)
 
-    await mounted.value.validateAt('email')
+    await mounted.value.validate('email')
     mounted.value.touch('email')
     email.value = 'changed@example.com'
     expect(mounted.value.stateFor('email')).toMatchObject({ dirty: true, validated: true, stale: true })
 
     pendingTarget = true
-    const target = mounted.value.validateAt('email')
+    const target = mounted.value.validate('email')
 
     mutateDuringReset = true
     throwDuringReset = true
@@ -2416,7 +2443,7 @@ describe('form state', () => {
     const mounted = mountValidation(() => useValidation(schema, { email: '' }), false)
 
     const full = mounted.value.validate()
-    const targeted = mounted.value.validateAt('email')
+    const targeted = mounted.value.validate('email')
     mounted.value.touch('email')
     mounted.value.resetState()
 
@@ -2453,7 +2480,7 @@ describe('form state', () => {
     process.on('unhandledRejection', recordUnhandled)
 
     try {
-      const targeted = mounted.value.validateAt('email')
+      const targeted = mounted.value.validate('email')
       const full = mounted.value.validate()
       mounted.value.resetState()
 
@@ -2516,7 +2543,7 @@ describe('form state', () => {
     }, false)
 
     const full = mounted.value.validate()
-    const targeted = mounted.value.validateAt('email')
+    const targeted = mounted.value.validate('email')
     const [fullResult, targetedResult] = await Promise.allSettled([full, targeted])
 
     expect(fullResult.status).toBe('rejected')
@@ -2550,7 +2577,7 @@ describe('form state', () => {
       return validation
     }, false)
 
-    await expect(mounted.value.validateAt('email')).rejects.toMatchObject({ name: 'AbortError' })
+    await expect(mounted.value.validate('email')).rejects.toMatchObject({ name: 'AbortError' })
     expect(mounted.value.result.value).toEqual({ status: 'idle' })
     expect(mounted.value.issues.value).toEqual([])
     expect(mounted.value.stateFor('email')).toMatchObject({ validated: false, validating: false })
@@ -2598,15 +2625,15 @@ describe('targeted validation interface', () => {
     const model = ref<Account>({ kind: 'person', dateOfBirth: '' })
     const mounted = mountValidation(() => useValidation(schema, model), false)
 
-    expectTypeOf(mounted.value.validateAt).parameter(0).toEqualTypeOf<
-      'kind' | 'dateOfBirth' | 'companyNumber' | readonly PropertyKey[]
+    expectTypeOf(mounted.value.validate).parameter(0).toEqualTypeOf<
+      'kind' | 'dateOfBirth' | 'companyNumber' | readonly PropertyKey[] | undefined
     >()
     mounted.value.touch('dateOfBirth')
     void mounted.value.stateFor('companyNumber')
     void mounted.value.issuesFor('companyNumber')
     if (false) {
       // @ts-expect-error Union controllers reject unknown top-level keys.
-      void mounted.value.validateAt('missing')
+      void mounted.value.validate('missing')
       // @ts-expect-error Union controllers reject unknown top-level keys.
       mounted.value.touch('missing')
       // @ts-expect-error Union controllers reject unknown top-level keys.
@@ -2626,17 +2653,17 @@ describe('targeted validation interface', () => {
       nullable: useValidation(nullableSchema, nullableModel),
     }), false)
 
-    expectTypeOf(mounted.value.optional.validateAt).parameter(0).toEqualTypeOf<
-      'email' | readonly PropertyKey[]
+    expectTypeOf(mounted.value.optional.validate).parameter(0).toEqualTypeOf<
+      'email' | readonly PropertyKey[] | undefined
     >()
-    expectTypeOf(mounted.value.nullable.validateAt).parameter(0).toEqualTypeOf<
-      'email' | readonly PropertyKey[]
+    expectTypeOf(mounted.value.nullable.validate).parameter(0).toEqualTypeOf<
+      'email' | readonly PropertyKey[] | undefined
     >()
     mounted.value.optional.touch('email')
     void mounted.value.nullable.stateFor('email')
     if (false) {
       // @ts-expect-error Optional object controllers reject unknown top-level keys.
-      void mounted.value.optional.validateAt('missing')
+      void mounted.value.optional.validate('missing')
       // @ts-expect-error Optional object controllers reject unknown top-level keys.
       mounted.value.optional.touch('missing')
       // @ts-expect-error Nullable object controllers reject unknown top-level keys.
@@ -2651,8 +2678,8 @@ describe('targeted validation interface', () => {
     const model = ref('')
     const mounted = mountValidation(() => useValidation(schema, model), false)
 
-    expectTypeOf(mounted.value.validateAt).parameter(0).toEqualTypeOf<
-      PropertyKey | readonly PropertyKey[]
+    expectTypeOf(mounted.value.validate).parameter(0).toEqualTypeOf<
+      PropertyKey | readonly PropertyKey[] | undefined
     >()
   })
 })

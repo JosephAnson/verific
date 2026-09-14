@@ -10,55 +10,16 @@ outline: deep
 `errorsFor()` returns an array of strings, so native Vue rendering is usually
 all a form needs:
 
-```vue
-<script setup lang="ts">
-import { useValidation } from '@verific/core'
-import { reactive } from 'vue'
-import { z } from 'zod'
+<<< ../examples/rendering/RenderingErrorsForm.vue
 
-const form = reactive({ email: '' })
-const schema = z.object({ email: z.string().email() })
-const { errorsFor, state, validate } = useValidation(schema, form)
+The complete source above is typechecked with the other documentation examples.
+The input always points to its persistent error list. `aria-invalid` exposes
+whether an error is present to assistive technology. `novalidate` ensures native
+browser validation does not stop the schema validation handler from running.
 
-async function submit() {
-  const result = await validate()
-  if (result.success && state.value.validated && !state.value.stale) {
-    // Submit form.email.
-  }
-}
-</script>
-
-<template>
-  <form novalidate aria-describedby="required-instructions" @submit.prevent="submit">
-    <p id="required-instructions">
-      Email is required.
-    </p>
-    <label for="email">Email</label>
-    <input
-      id="email"
-      v-model="form.email"
-      type="email"
-      required
-      :aria-invalid="errorsFor('email').length > 0"
-      :aria-describedby="errorsFor('email').length ? 'email-errors' : undefined"
-    >
-
-    <ul id="email-errors" aria-live="polite">
-      <li v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
-        {{ error }}
-      </li>
-    </ul>
-
-    <button type="submit">
-      Continue
-    </button>
-  </form>
-</template>
-```
-
-The input points to the error list only while errors exist. `aria-invalid`
-exposes the same state to assistive technology. `novalidate` ensures native
-browser validation does not stop Verific's submit handler from running.
+Blur validates the email path directly, and submission validates the complete
+form. This example only renders validation errors; the
+[save workflow](../core/service-layer-to-validation) adds an application-owned request.
 
 The application owns the list, styling and live-region behaviour. This works
 with native HTML or the equivalent elements from a design system.
@@ -77,7 +38,7 @@ import { ErrorMessages } from '@verific/core'
 In the same form, replace the `v-for` list items with its scoped slot:
 
 ```vue
-<ul id="email-errors" aria-live="polite">
+<ul id="rendering-email-errors" aria-live="polite">
   <ErrorMessages v-slot="{ message, index }" :messages="errorsFor('email')">
     <li :key="`${index}:${message}`">
       {{ message }}
@@ -115,9 +76,9 @@ Then pass both sources to `ErrorMessages`; the slot markup stays unchanged:
     { 'We could not verify this email': verificationFailed },
   ]"
 >
-  <p :key="`${index}:${message}`" class="error" role="alert">
+  <li :key="`${index}:${message}`">
     {{ message }}
-  </p>
+  </li>
 </ErrorMessages>
 ```
 

@@ -29,11 +29,11 @@ import { z } from 'zod'
 
 const email = ref('')
 const schema = z.object({ email: z.string().email() })
-const { errorsFor, hasError, state, touch, validate, validateAt } = useValidation(schema, { email })
+const { errorsFor, hasError, state, touch, validate } = useValidation(schema, { email })
 
 async function onEmailBlur() {
   touch('email')
-  await validateAt('email')
+  await validate('email')
 }
 
 async function submit() {
@@ -71,7 +71,7 @@ async function submit() {
 </template>
 ```
 
-The auto-imported `validateAt('email')` runs the complete schema and publishes
+The auto-imported `validate('email')` runs the complete schema and publishes
 only that exact path. `touch('email')` records the blur separately, while
 `validate()` remains the full submission gate. Without localisation,
 `errorsFor()` returns the schema's error text. See the

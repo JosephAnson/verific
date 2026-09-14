@@ -24,10 +24,6 @@ export type ScopeValidationResult
   = | { readonly success: true, readonly issues: readonly ValidationIssue[] }
     | { readonly success: false, readonly issues: readonly ValidationIssue[] }
 
-export interface ScopeTargetValidationResult {
-  readonly issues: readonly ValidationIssue[]
-}
-
 interface CommittedValidationState {
   readonly results: ReadonlyMap<symbol, ScopeRegistrationResult<unknown>>
   readonly issues: ReadonlyMap<symbol, readonly ValidationIssue[]>
@@ -60,8 +56,7 @@ export interface InternalValidationScope {
   stateFor: (path: readonly PropertyKey[]) => ObservedValidationState
   touch: (path: readonly PropertyKey[]) => void
   resetState: () => void
-  validate: () => Promise<ScopeValidationResult>
-  validateAt: (path: readonly PropertyKey[]) => Promise<ScopeTargetValidationResult>
+  validate: (path?: readonly PropertyKey[]) => Promise<ScopeValidationResult>
 }
 
 interface ValidationRegistration extends ObservableRegistration {
@@ -106,7 +101,7 @@ interface FullRun extends ValidationRun<ScopeValidationResult> {
   snapshots?: readonly ValidationSnapshot<ValidationRegistration>[]
 }
 
-interface TargetRun extends ValidationRun<ScopeTargetValidationResult> {
+interface TargetRun extends ValidationRun<ScopeValidationResult> {
   readonly path: readonly PropertyKey[]
 }
 
@@ -357,7 +352,7 @@ export function createValidationScope(
     observation.finishReset()
   }
 
-  function validate(): Promise<ScopeValidationResult> {
+  function validateAll(): Promise<ScopeValidationResult> {
     if (lifetime.signal.aborted)
       return Promise.reject(lifetime.signal.reason)
     if (observation.isResetting()) {
@@ -415,14 +410,14 @@ export function createValidationScope(
     return run.promise
   }
 
-  function validateAt(path: readonly PropertyKey[]): Promise<ScopeTargetValidationResult> {
+  function validateTarget(path: readonly PropertyKey[]): Promise<ScopeValidationResult> {
     if (lifetime.signal.aborted)
       return Promise.reject(lifetime.signal.reason)
     if (observation.isResetting()) {
-      return blockValidationDuringReset<ScopeTargetValidationResult>(resetCapture!)
+      return blockValidationDuringReset<ScopeValidationResult>(resetCapture!)
     }
     const resolvedPath = Object.freeze([...path])
-    const deferred = createDeferred<ScopeTargetValidationResult>()
+    const deferred = createDeferred<ScopeValidationResult>()
     const run: TargetRun = {
       path: resolvedPath,
       id: ++epoch,
@@ -509,13 +504,13 @@ export function createValidationScope(
       }
     }
     const failed = [...results.values()].some(result => result.status === 'invalid')
-    observation.recordFullValidation(capture.stampSnapshots, new Set(outcomes.map(outcome => outcome.id)))
+    capture.recordValidated(new Set(outcomes.map(outcome => outcome.id)))
     safelyPublishCommitted({ results, issues: publishedIssues, failed })
     const issues = readIssues()
     return failed || externalIssues.value.length > 0 ? { success: false, issues } : { success: true, issues }
   }
 
-  async function runTargetValidation(run: TargetRun): Promise<ScopeTargetValidationResult> {
+  async function runTargetValidation(run: TargetRun): Promise<ScopeValidationResult> {
     while (true) {
       const blockingFull = activeFull
       if (!blockingFull)
@@ -548,9 +543,14 @@ export function createValidationScope(
       issues.set(id, replaceIssuesAtPath(issues.get(id) ?? [], run.path, selected))
       selectedIssues.push(...selected)
     }
-    observation.recordExactValidation(run.path, capture.stampSnapshots, new Set(outcomes.map(outcome => outcome.id)))
+    capture.recordValidated(new Set(outcomes.map(outcome => outcome.id)))
     safelyPublishCommitted({ ...committed.value, issues })
-    return { issues: [...selectedIssues, ...externalIssues.value.filter(issue => pathsEqual(issue.path, run.path))] }
+    const targetIssues = [...selectedIssues, ...externalIssues.value.filter(issue => pathsEqual(issue.path, run.path))]
+    return { success: targetIssues.length === 0, issues: targetIssues }
+  }
+
+  function validate(path?: readonly PropertyKey[]): Promise<ScopeValidationResult> {
+    return path === undefined ? validateAll() : validateTarget(path)
   }
 
   async function executeRun<Value>(
@@ -635,7 +635,7 @@ export function createValidationScope(
 
   function supersedeTarget(
     previous: TargetRun | undefined,
-    replacement: Promise<ScopeTargetValidationResult>,
+    replacement: Promise<ScopeValidationResult>,
   ): void {
     if (!previous || !pendingWork.has(previous)) {
       return
@@ -726,8 +726,9 @@ export function createValidationScope(
     }
   }
 
-  function projectLatestFull(run: FullRun, path: readonly PropertyKey[]): Promise<ScopeTargetValidationResult> {
+  function projectLatestFull(run: FullRun, path: readonly PropertyKey[]): Promise<ScopeValidationResult> {
     return followLatest(run, run.promise, () => latestFull?.promise).then(result => ({
+      success: result.issues.every(issue => !pathsEqual(issue.path, path)),
       issues: result.issues.filter(issue => pathsEqual(issue.path, path)),
     }))
   }
@@ -767,7 +768,7 @@ export function createValidationScope(
     dispose,
     isValidating,
     remapArray,
-    captureCommitContext: path => observation.captureAt(path).stampSnapshots.map(({ id, schema, input }) => ({ id, schema, input })),
+    captureCommitContext: path => observation.captureAt(path).snapshots.map(({ id, schema, input }) => ({ id, schema, input })),
     onCancel: (listener) => {
       cancelListeners.add(listener)
       return () => {
@@ -784,7 +785,6 @@ export function createValidationScope(
     touch: observation.touch,
     resetState,
     validate,
-    validateAt,
   }
 }
 

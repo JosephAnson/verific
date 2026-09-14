@@ -157,7 +157,7 @@ describe('standalone scopes', () => {
     await validationRejected
     await queuedRejected
     await expect(root.validate()).rejects.toMatchObject({ name: 'AbortError' })
-    await expect(root.validateAt('email')).rejects.toMatchObject({ name: 'AbortError' })
+    await expect(root.validate('email')).rejects.toMatchObject({ name: 'AbortError' })
     await expect(field.commit('email')).rejects.toMatchObject({ name: 'AbortError' })
     expect(() => root.register(schema(), {})).toThrow('disposed')
     expect(() => root.setIssues([], [{ message: 'Late' }])).toThrow('disposed')
