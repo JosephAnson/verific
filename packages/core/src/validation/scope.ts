@@ -3,11 +3,13 @@ import type { ComputedRef, MaybeRef } from 'vue'
 import type { ValidationIssue } from '../messages'
 import type { IssuePipeline, ValidationPolicyOptions } from './issuePipeline'
 import type { ObservableRegistration, ObservedValidationState, ValidationSnapshot } from './registrationObservation'
+import type { ValidationRun } from './runs'
 import { computed, shallowRef } from 'vue'
 import { validateWithStandardSchema } from '../utils/schemaUtils'
 import { createIssuePipeline, resolveValidationMessage } from './issuePipeline'
 import { pathsEqual } from './paths'
 import { createRegistrationObservation, snapshotValidationData } from './registrationObservation'
+import { abortRun, followLatest, raceCancellation, supersedeRun, throwIfAborted } from './runs'
 
 export interface ScopeRegistrationOptions extends ValidationPolicyOptions {
   readonly at?: readonly PropertyKey[]
@@ -64,17 +66,12 @@ export interface InternalValidationScope {
 
 interface ValidationRegistration extends ObservableRegistration {
   readonly issuePipeline: IssuePipeline
-  readonly disposed: CancellationSignal
+  readonly disposed: AbortController
 }
 
 interface PublishedValidationState {
   readonly committed: CommittedValidationState
   readonly isValidating: boolean
-}
-
-interface CancellationSignal {
-  cancel: () => void
-  subscribe: (listener: () => void) => () => void
 }
 
 type ValidationOutcome
@@ -90,15 +87,10 @@ type ValidationOutcome
     readonly status: 'rejected'
     readonly reason: unknown
   }
-  | { readonly status: 'disposed' | 'superseded' }
+  | { readonly status: 'cancelled' }
 
 type CompletedValidationOutcome = Extract<ValidationOutcome, { readonly id: symbol }>
-type CancelledValidationOutcome = Exclude<ValidationOutcome, CompletedValidationOutcome>
-
-interface ValidationWork {
-  readonly signal: CancellationSignal
-  abortReason?: Error
-}
+type ValidationWork = ValidationRun<unknown>
 
 interface Deferred<Value> {
   readonly promise: Promise<Value>
@@ -110,16 +102,12 @@ interface ResetCapture {
   readonly blockedValidations: Array<(reason: unknown) => void>
 }
 
-interface ValidationAuthority extends ValidationWork {
-  readonly promise: Promise<ScopeValidationResult>
+interface FullRun extends ValidationRun<ScopeValidationResult> {
   snapshots?: readonly ValidationSnapshot<ValidationRegistration>[]
-  replacement?: Promise<ScopeValidationResult>
 }
 
-interface TargetValidationAuthority extends ValidationWork {
+interface TargetRun extends ValidationRun<ScopeTargetValidationResult> {
   readonly path: readonly PropertyKey[]
-  readonly promise: Promise<ScopeTargetValidationResult>
-  replacement?: Promise<ScopeTargetValidationResult>
 }
 
 const IDLE_RESULT = Object.freeze({ status: 'idle' as const })
@@ -171,10 +159,11 @@ export function createValidationScope(
   }
   const pendingWork = new Set<ValidationWork>()
   const unsettledWork = new Set<ValidationWork>()
-  let activeFull: ValidationAuthority | undefined
-  let latestFull: ValidationAuthority | undefined
-  const activeTargets: TargetValidationAuthority[] = []
-  const latestTargets: TargetValidationAuthority[] = []
+  let epoch = 0
+  let activeFull: FullRun | undefined
+  let latestFull: FullRun | undefined
+  const activeTargets: TargetRun[] = []
+  const latestTargets: TargetRun[] = []
   let resetCapture: ResetCapture | undefined
   const observation = createRegistrationObservation(registrations, () => ({
     validating: pendingWork.size > 0,
@@ -210,8 +199,7 @@ export function createValidationScope(
 
   function cancelWork(reason: Error): void {
     for (const work of [...unsettledWork]) {
-      work.abortReason = reason
-      work.signal.cancel()
+      abortRun(work, reason)
     }
     pendingWork.clear()
     unsettledWork.clear()
@@ -234,7 +222,7 @@ export function createValidationScope(
       rejectBlockedValidations(resetCapture, reason)
     for (const [id, registration] of [...registrations]) {
       observation.removeRegistration(id, registration)
-      registration.disposed.cancel()
+      registration.disposed.abort()
     }
     externalIssues.value = []
     safelyPublishCommitted({ results: new Map(), issues: new Map(), failed: false })
@@ -274,7 +262,7 @@ export function createValidationScope(
   ) {
     lifetime.signal.throwIfAborted()
     const id = Symbol('validation')
-    const disposed = createCancellationSignal()
+    const disposed = new AbortController()
     const at = Object.freeze([...(registrationOptions.at ?? [])])
     const issuePipeline = createIssuePipeline(at, {
       registration: registrationOptions,
@@ -290,10 +278,10 @@ export function createValidationScope(
       disposed,
     }
     try {
-      observation.addRegistration(id, registration, disposed.cancel)
+      observation.addRegistration(id, registration, () => disposed.abort())
     }
     catch (reason) {
-      disposed.cancel()
+      disposed.abort()
       throw reason
     }
 
@@ -313,7 +301,7 @@ export function createValidationScope(
         if (!observation.removeRegistration(id, registration)) {
           return
         }
-        disposed.cancel()
+        disposed.abort()
         const results = new Map(committed.value.results)
         const issues = new Map(committed.value.issues)
         results.delete(id)
@@ -376,54 +364,55 @@ export function createValidationScope(
       return blockValidationDuringReset<ScopeValidationResult>(resetCapture!)
     }
     const deferred = createDeferred<ScopeValidationResult>()
-    const authority: ValidationAuthority = {
-      signal: createCancellationSignal(),
+    const run: FullRun = {
+      id: ++epoch,
+      controller: new AbortController(),
+      state: { status: 'running' },
       promise: deferred.promise,
     }
     const previousFull = activeFull
     const previousLatestFull = latestFull
-    activeFull = authority
-    latestFull = authority
+    activeFull = run
+    latestFull = run
     try {
-      beginWork(authority)
+      beginWork(run)
     }
     catch (reason) {
-      if (activeFull === authority) {
+      if (activeFull?.id === run.id) {
         activeFull = previousFull
       }
-      if (latestFull === authority) {
+      if (latestFull?.id === run.id) {
         latestFull = previousLatestFull
       }
-      finishWork(authority)
-      if (authority.abortReason) {
-        unsettledWork.delete(authority)
-        deferred.reject(authority.abortReason)
+      finishWork(run)
+      if (run.state.status === 'aborted') {
+        unsettledWork.delete(run)
+        deferred.reject(run.state.reason)
       }
-      else if (authority.replacement) {
-        supersedeFullAuthority(previousFull, authority.promise)
-        deliverValidation(authority, adoptLatestFull(authority, authority.replacement), deferred)
+      else if (run.state.status === 'superseded') {
+        supersedeFull(previousFull, run.promise)
+        deliverValidation(run, followLatest(run, run.state.next, () => latestFull?.promise), deferred)
       }
       else {
-        unsettledWork.delete(authority)
+        unsettledWork.delete(run)
         deferred.reject(reason)
       }
-      return authority.promise
+      return run.promise
     }
 
-    supersedeFullAuthority(previousFull, authority.promise)
+    supersedeFull(previousFull, run.promise)
     for (const target of [...activeTargets]) {
-      const replacement = projectLatestFull(authority, target.path)
+      const replacement = projectLatestFull(run, target.path)
       // Reset can abort the target before it adopts this internal projection.
-      // Observe rejection without changing the original promise's authority.
+      // Observe rejection while preserving the caller's original promise.
       void replacement.catch(() => {})
-      target.replacement = replacement
-      target.signal.cancel()
+      supersedeRun(target, replacement)
       finishWork(target)
       removeActiveTarget(target)
     }
 
-    deliverValidation(authority, runFullValidation(authority), deferred)
-    return authority.promise
+    deliverValidation(run, executeRun(run, () => runFullValidation(run), () => latestFull?.promise), deferred)
+    return run.promise
   }
 
   function validateAt(path: readonly PropertyKey[]): Promise<ScopeTargetValidationResult> {
@@ -434,259 +423,224 @@ export function createValidationScope(
     }
     const resolvedPath = Object.freeze([...path])
     const deferred = createDeferred<ScopeTargetValidationResult>()
-    const authority: TargetValidationAuthority = {
+    const run: TargetRun = {
       path: resolvedPath,
-      signal: createCancellationSignal(),
+      id: ++epoch,
+      controller: new AbortController(),
+      state: { status: 'running' },
       promise: deferred.promise,
     }
     const previousActiveTarget = [...activeTargets].reverse().find(target => pathsEqual(target.path, resolvedPath))
     const previousLatestTarget = latestTargetFor(resolvedPath)
-    activeTargets.push(authority)
-    setLatestTarget(authority)
+    activeTargets.push(run)
+    setLatestTarget(run)
     try {
-      beginWork(authority)
+      beginWork(run)
     }
     catch (reason) {
-      removeActiveTarget(authority)
-      finishWork(authority)
-      if (authority.abortReason) {
-        unsettledWork.delete(authority)
-        releaseLatestTarget(authority.path)
-        deferred.reject(authority.abortReason)
+      removeActiveTarget(run)
+      finishWork(run)
+      if (run.state.status === 'aborted') {
+        unsettledWork.delete(run)
+        releaseLatestTarget(run.path)
+        deferred.reject(run.state.reason)
       }
-      else if (authority.replacement) {
-        supersedeTargetAuthority(previousActiveTarget, authority.promise)
-        deliverValidation(authority, adoptTargetReplacement(authority, authority.replacement), deferred)
+      else if (run.state.status === 'superseded') {
+        supersedeTarget(previousActiveTarget, run.promise)
+        deliverValidation(run, followLatest(run, run.state.next, () => latestTargetFor(run.path)?.promise), deferred)
       }
       else {
-        if (latestTargetFor(authority.path) === authority
+        if (latestTargetFor(run.path) === run
           && previousLatestTarget) {
           setLatestTarget(previousLatestTarget)
         }
-        unsettledWork.delete(authority)
-        releaseLatestTarget(authority.path)
+        unsettledWork.delete(run)
+        releaseLatestTarget(run.path)
         deferred.reject(reason)
       }
-      return authority.promise
+      return run.promise
     }
-    supersedeTargetAuthority(previousActiveTarget, authority.promise)
+    supersedeTarget(previousActiveTarget, run.promise)
 
-    deliverValidation(authority, runTargetValidation(authority), deferred)
-    return authority.promise
+    deliverValidation(run, executeRun(run, () => runTargetValidation(run), () => latestTargetFor(run.path)?.promise), deferred)
+    return run.promise
   }
 
-  async function runFullValidation(authority: ValidationAuthority): Promise<ScopeValidationResult> {
+  function assertCurrent(run: FullRun | TargetRun): void {
+    throwIfAborted(run)
+    const latest = isTargetRun(run) ? latestTargetFor(run.path) : latestFull
+    if (run.state.status !== 'running' || latest?.id !== run.id)
+      throw new Error('Validation run was superseded')
+  }
+
+  async function collectOutcomes(
+    run: ValidationWork,
+    snapshots: readonly ValidationSnapshot<ValidationRegistration>[],
+  ): Promise<CompletedValidationOutcome[]> {
+    const outcomes = await Promise.all(snapshots.map(snapshot => raceCancellation(
+      settleValidation(snapshot),
+      [snapshot.registration.disposed.signal, run.controller.signal],
+    )))
+    const active = outcomes.filter(
+      (outcome): outcome is CompletedValidationOutcome => 'id' in outcome
+        && registrations.get(outcome.id) === outcome.registration,
+    )
+    const rejection = active.find(outcome => outcome.status === 'rejected')
+    if (rejection?.status === 'rejected')
+      throw rejection.reason
+    return active
+  }
+
+  async function runFullValidation(run: FullRun): Promise<ScopeValidationResult> {
+    assertCurrent(run)
+    const capture = observation.captureAll()
+    run.snapshots = capture.snapshots
+    observation.safelyInvalidate()
+    const outcomes = await collectOutcomes(run, capture.snapshots)
+    assertCurrent(run)
+
+    const results = new Map<symbol, ScopeRegistrationResult<unknown>>()
+    const publishedIssues = new Map<symbol, readonly ValidationIssue[]>()
+    for (const [id] of registrations) {
+      const outcome = outcomes.find(candidate => candidate.id === id)
+      if (outcome?.status === 'fulfilled') {
+        results.set(id, outcome.result)
+        publishedIssues.set(id, issuesFromResult(outcome.result))
+      }
+    }
+    const failed = [...results.values()].some(result => result.status === 'invalid')
+    observation.recordFullValidation(capture.stampSnapshots, new Set(outcomes.map(outcome => outcome.id)))
+    safelyPublishCommitted({ results, issues: publishedIssues, failed })
+    const issues = readIssues()
+    return failed || externalIssues.value.length > 0 ? { success: false, issues } : { success: true, issues }
+  }
+
+  async function runTargetValidation(run: TargetRun): Promise<ScopeTargetValidationResult> {
+    while (true) {
+      const blockingFull = activeFull
+      if (!blockingFull)
+        break
+      try {
+        await blockingFull.promise
+      }
+      catch {
+        // Exact requests wait for full validation, including failed full runs.
+      }
+      assertCurrent(run)
+    }
+    assertCurrent(run)
+    const capture = observation.captureAt(run.path)
+    const outcomes = await collectOutcomes(run, capture.snapshots)
+    assertCurrent(run)
+
+    const replacements = new Map<symbol, readonly ValidationIssue[]>()
+    for (const outcome of outcomes) {
+      if (outcome.status === 'fulfilled') {
+        replacements.set(outcome.id, issuesFromResult(outcome.result).filter(issue => pathsEqual(issue.path, run.path)))
+      }
+    }
+    const issues = new Map(committed.value.issues)
+    const selectedIssues: ValidationIssue[] = []
+    for (const [id] of registrations) {
+      const selected = replacements.get(id)
+      if (selected === undefined)
+        continue
+      issues.set(id, replaceIssuesAtPath(issues.get(id) ?? [], run.path, selected))
+      selectedIssues.push(...selected)
+    }
+    observation.recordExactValidation(run.path, capture.stampSnapshots, new Set(outcomes.map(outcome => outcome.id)))
+    safelyPublishCommitted({ ...committed.value, issues })
+    return { issues: [...selectedIssues, ...externalIssues.value.filter(issue => pathsEqual(issue.path, run.path))] }
+  }
+
+  async function executeRun<Value>(
+    run: ValidationRun<Value>,
+    operation: () => Promise<Value>,
+    latest: () => Promise<Value> | undefined,
+  ): Promise<Value> {
+    let outcome: { value: Value } | { reason: unknown }
     try {
-      const capture = observation.captureAll()
-      const snapshots = capture.snapshots
-      authority.snapshots = snapshots
-      observation.safelyInvalidate()
-      const outcomes = await Promise.all(snapshots.map(snapshot => raceValidationOutcome(
-        settleValidation(snapshot),
-        [
-          { signal: snapshot.registration.disposed, outcome: { status: 'disposed' } },
-          { signal: authority.signal, outcome: { status: 'superseded' } },
-        ],
-      )))
-
-      throwIfAborted(authority)
-      if (authority.replacement) {
-        return adoptLatestFull(authority, authority.replacement)
-      }
-
-      const activeOutcomes = outcomes.filter(
-        (outcome): outcome is CompletedValidationOutcome => 'id' in outcome
-          && registrations.get(outcome.id) === outcome.registration,
-      )
-      const rejection = activeOutcomes.find(outcome => outcome.status === 'rejected')
-      if (rejection?.status === 'rejected') {
-        throw rejection.reason
-      }
-
-      const results = new Map<symbol, ScopeRegistrationResult<unknown>>()
-      const publishedIssues = new Map<symbol, readonly ValidationIssue[]>()
-      for (const [id] of registrations) {
-        const outcome = activeOutcomes.find(candidate => candidate.id === id)
-        if (outcome?.status === 'fulfilled') {
-          results.set(id, outcome.result)
-          publishedIssues.set(id, issuesFromResult(outcome.result))
-        }
-      }
-      const failed = [...results.values()].some(result => result.status === 'invalid')
-      const activeIds = new Set(activeOutcomes.map(outcome => outcome.id))
-      observation.recordFullValidation(capture.stampSnapshots, activeIds)
-      safelyPublishCommitted({ results, issues: publishedIssues, failed })
-
-      if (authority.replacement) {
-        return adoptLatestFull(authority, authority.replacement)
-      }
-      const issues = readIssues()
-      return failed || externalIssues.value.length > 0 ? { success: false, issues } : { success: true, issues }
+      outcome = { value: await operation() }
     }
     catch (reason) {
-      throwIfAborted(authority)
-      if (authority.replacement) {
-        return adoptLatestFull(authority, authority.replacement)
-      }
-      throw reason
+      outcome = { reason }
+    }
+    try {
+      throwIfAborted(run)
+      if (run.state.status === 'superseded')
+        return followLatest(run, run.state.next, latest)
+      if ('reason' in outcome)
+        throw outcome.reason
+      return outcome.value
     }
     finally {
-      if (activeFull === authority) {
+      if (activeFull?.id === run.id)
         activeFull = undefined
-      }
-      finishWork(authority)
-    }
-  }
-
-  async function runTargetValidation(authority: TargetValidationAuthority): Promise<ScopeTargetValidationResult> {
-    try {
-      while (true) {
-        const blockingFull = activeFull
-        if (!blockingFull) {
-          break
-        }
-        try {
-          await blockingFull.promise
-        }
-        catch {
-          // A field request waits for full validation to settle, even when it fails.
-        }
-        throwIfAborted(authority)
-        if (authority.replacement) {
-          return adoptTargetReplacement(authority, authority.replacement)
-        }
-      }
-      throwIfAborted(authority)
-      if (authority.replacement) {
-        return adoptTargetReplacement(authority, authority.replacement)
-      }
-
-      const capture = observation.captureAt(authority.path)
-      const snapshots = capture.snapshots
-      const outcomes = await Promise.all(snapshots.map(snapshot => raceValidationOutcome(
-        settleValidation(snapshot),
-        [
-          { signal: snapshot.registration.disposed, outcome: { status: 'disposed' } },
-          { signal: authority.signal, outcome: { status: 'superseded' } },
-        ],
-      )))
-
-      throwIfAborted(authority)
-      if (authority.replacement) {
-        return adoptTargetReplacement(authority, authority.replacement)
-      }
-
-      const activeOutcomes = outcomes.filter(
-        (outcome): outcome is CompletedValidationOutcome => 'id' in outcome
-          && registrations.get(outcome.id) === outcome.registration,
-      )
-      const rejection = activeOutcomes.find(outcome => outcome.status === 'rejected')
-      if (rejection?.status === 'rejected') {
-        throw rejection.reason
-      }
-
-      const replacementIssues = new Map<symbol, readonly ValidationIssue[]>()
-      for (const outcome of activeOutcomes) {
-        if (outcome.status === 'fulfilled') {
-          replacementIssues.set(
-            outcome.id,
-            issuesFromResult(outcome.result).filter(issue => pathsEqual(issue.path, authority.path)),
-          )
-        }
-      }
-      const issues = new Map(committed.value.issues)
-      const selectedIssues: ValidationIssue[] = []
-      for (const [id] of registrations) {
-        const replacements = replacementIssues.get(id)
-        if (replacements === undefined) {
-          continue
-        }
-        issues.set(id, replaceIssuesAtPath(issues.get(id) ?? [], authority.path, replacements))
-        selectedIssues.push(...replacements)
-      }
-      const activeIds = new Set(activeOutcomes.map(outcome => outcome.id))
-      observation.recordExactValidation(authority.path, capture.stampSnapshots, activeIds)
-      safelyPublishCommitted({ ...committed.value, issues })
-
-      if (authority.replacement) {
-        return adoptTargetReplacement(authority, authority.replacement)
-      }
-      return { issues: [...selectedIssues, ...externalIssues.value.filter(issue => pathsEqual(issue.path, authority.path))] }
-    }
-    catch (reason) {
-      throwIfAborted(authority)
-      if (authority.replacement) {
-        return adoptTargetReplacement(authority, authority.replacement)
-      }
-      throw reason
-    }
-    finally {
-      removeActiveTarget(authority)
-      finishWork(authority)
+      if (isTargetRun(run))
+        removeActiveTarget(run)
+      finishWork(run)
     }
   }
 
   function deliverValidation<Value>(
-    authority: ValidationWork,
+    run: ValidationWork,
     operation: Promise<Value>,
     deferred: Deferred<Value>,
   ): void {
     void operation.then(
       (value) => {
-        const abortReason = authority.abortReason
+        const abortReason = run.state.status === 'aborted' ? run.state.reason : undefined
         if (abortReason) {
           deferred.reject(abortReason)
         }
         else {
           deferred.resolve(value)
         }
-        unsettledWork.delete(authority)
-        if (isTargetAuthority(authority)) {
-          releaseLatestTarget(authority.path)
+        unsettledWork.delete(run)
+        if (isTargetRun(run)) {
+          releaseLatestTarget(run.path)
         }
       },
       (reason) => {
-        deferred.reject(authority.abortReason ?? reason)
-        unsettledWork.delete(authority)
-        if (isTargetAuthority(authority)) {
-          releaseLatestTarget(authority.path)
+        deferred.reject(run.state.status === 'aborted' ? run.state.reason : reason)
+        unsettledWork.delete(run)
+        if (isTargetRun(run)) {
+          releaseLatestTarget(run.path)
         }
       },
     )
   }
 
-  function beginWork(authority: ValidationWork): void {
-    pendingWork.add(authority)
-    unsettledWork.add(authority)
+  function beginWork(run: ValidationWork): void {
+    pendingWork.add(run)
+    unsettledWork.add(run)
     publishValidatingAndInvalidate(true, true)
   }
 
-  function finishWork(authority: ValidationWork): void {
-    pendingWork.delete(authority)
+  function finishWork(run: ValidationWork): void {
+    pendingWork.delete(run)
     publishValidatingAndInvalidate(pendingWork.size > 0, false)
   }
 
-  function supersedeFullAuthority(
-    previous: ValidationAuthority | undefined,
+  function supersedeFull(
+    previous: FullRun | undefined,
     replacement: Promise<ScopeValidationResult>,
   ): void {
     if (!previous || !pendingWork.has(previous)) {
       return
     }
-    previous.replacement = replacement
-    previous.signal.cancel()
+    supersedeRun(previous, replacement)
     finishWork(previous)
   }
 
-  function supersedeTargetAuthority(
-    previous: TargetValidationAuthority | undefined,
+  function supersedeTarget(
+    previous: TargetRun | undefined,
     replacement: Promise<ScopeTargetValidationResult>,
   ): void {
     if (!previous || !pendingWork.has(previous)) {
       return
     }
-    previous.replacement = replacement
-    previous.signal.cancel()
+    supersedeRun(previous, replacement)
     finishWork(previous)
     removeActiveTarget(previous)
   }
@@ -735,33 +689,33 @@ export function createValidationScope(
     }
   }
 
-  function removeActiveTarget(authority: TargetValidationAuthority): void {
-    const index = activeTargets.indexOf(authority)
+  function removeActiveTarget(run: TargetRun): void {
+    const index = activeTargets.indexOf(run)
     if (index >= 0) {
       activeTargets.splice(index, 1)
     }
   }
 
-  function isTargetAuthority(authority: ValidationWork): authority is TargetValidationAuthority {
-    return Object.hasOwn(authority, 'path')
+  function isTargetRun(run: ValidationWork): run is TargetRun {
+    return Object.hasOwn(run, 'path')
   }
 
-  function latestTargetFor(path: readonly PropertyKey[]): TargetValidationAuthority | undefined {
+  function latestTargetFor(path: readonly PropertyKey[]): TargetRun | undefined {
     return latestTargets.find(target => pathsEqual(target.path, path))
   }
 
-  function setLatestTarget(authority: TargetValidationAuthority): void {
-    const previous = latestTargetFor(authority.path)
+  function setLatestTarget(run: TargetRun): void {
+    const previous = latestTargetFor(run.path)
     if (previous) {
-      latestTargets.splice(latestTargets.indexOf(previous), 1, authority)
+      latestTargets.splice(latestTargets.indexOf(previous), 1, run)
     }
     else {
-      latestTargets.push(authority)
+      latestTargets.push(run)
     }
   }
 
   function releaseLatestTarget(path: readonly PropertyKey[]): void {
-    const hasUnsettledTarget = [...unsettledWork].some(work => isTargetAuthority(work)
+    const hasUnsettledTarget = [...unsettledWork].some(work => isTargetRun(work)
       && pathsEqual(work.path, path))
     if (hasUnsettledTarget) {
       return
@@ -772,73 +726,10 @@ export function createValidationScope(
     }
   }
 
-  async function adoptLatestFull(
-    owner: ValidationAuthority,
-    validation: Promise<ScopeValidationResult>,
-  ): Promise<ScopeValidationResult> {
-    try {
-      const result = await validation
-      throwIfAborted(owner)
-      const newest = latestFull?.promise
-      if (newest && newest !== validation && newest !== owner.promise) {
-        return adoptLatestFull(owner, newest)
-      }
-      return result
-    }
-    catch (reason) {
-      throwIfAborted(owner)
-      const newest = latestFull?.promise
-      if (newest && newest !== validation && newest !== owner.promise) {
-        return adoptLatestFull(owner, newest)
-      }
-      throw reason
-    }
-  }
-
-  async function adoptTargetReplacement(
-    authority: TargetValidationAuthority,
-    replacement: Promise<ScopeTargetValidationResult>,
-  ): Promise<ScopeTargetValidationResult> {
-    try {
-      const result = await replacement
-      throwIfAborted(authority)
-      const newest = latestTargetFor(authority.path)?.promise
-      if (newest && newest !== authority.promise && newest !== replacement) {
-        return adoptTargetReplacement(authority, newest)
-      }
-      return result
-    }
-    catch (reason) {
-      throwIfAborted(authority)
-      const newest = latestTargetFor(authority.path)?.promise
-      if (newest && newest !== authority.promise && newest !== replacement) {
-        return adoptTargetReplacement(authority, newest)
-      }
-      throw reason
-    }
-  }
-
-  async function projectLatestFull(
-    authority: ValidationAuthority,
-    path: readonly PropertyKey[],
-  ): Promise<ScopeTargetValidationResult> {
-    try {
-      const result = await projectValidation(authority.promise, path)
-      throwIfAborted(authority)
-      const newest = latestFull
-      if (newest && newest !== authority) {
-        return projectLatestFull(newest, path)
-      }
-      return result
-    }
-    catch (reason) {
-      throwIfAborted(authority)
-      const newest = latestFull
-      if (newest && newest !== authority) {
-        return projectLatestFull(newest, path)
-      }
-      throw reason
-    }
+  function projectLatestFull(run: FullRun, path: readonly PropertyKey[]): Promise<ScopeTargetValidationResult> {
+    return followLatest(run, run.promise, () => latestFull?.promise).then(result => ({
+      issues: result.issues.filter(issue => pathsEqual(issue.path, path)),
+    }))
   }
 
   async function settleValidation(
@@ -897,16 +788,6 @@ export function createValidationScope(
   }
 }
 
-function projectValidation(
-  validation: Promise<ScopeValidationResult>,
-  path: readonly PropertyKey[],
-): Promise<ScopeTargetValidationResult> {
-  return validation.then((result) => {
-    const issues = result.issues.filter(issue => pathsEqual(issue.path, path))
-    return { issues }
-  })
-}
-
 function createDeferred<Value>(): Deferred<Value> {
   let resolve!: (value: Value | PromiseLike<Value>) => void
   let reject!: (reason?: unknown) => void
@@ -928,63 +809,6 @@ function blockValidationDuringReset<Value>(capture: ResetCapture): Promise<Value
 
 function rejectBlockedValidations(capture: ResetCapture, reason: unknown): void {
   capture.blockedValidations.splice(0).forEach(reject => reject(reason))
-}
-
-function createCancellationSignal(): CancellationSignal {
-  const listeners = new Set<() => void>()
-  let cancelled = false
-  return {
-    cancel: () => {
-      if (cancelled) {
-        return
-      }
-      cancelled = true
-      for (const listener of [...listeners]) {
-        listener()
-      }
-      listeners.clear()
-    },
-    subscribe: (listener) => {
-      if (cancelled) {
-        listener()
-      }
-      else {
-        listeners.add(listener)
-      }
-      return () => listeners.delete(listener)
-    },
-  }
-}
-
-function raceValidationOutcome(
-  validation: Promise<CompletedValidationOutcome>,
-  cancellations: readonly { readonly signal: CancellationSignal, readonly outcome: CancelledValidationOutcome }[],
-): Promise<ValidationOutcome> {
-  return new Promise((resolve) => {
-    const unsubscribe: Array<() => void> = []
-    let completed = false
-    const finish = (outcome: ValidationOutcome) => {
-      if (completed) {
-        return
-      }
-      completed = true
-      unsubscribe.splice(0).forEach(stop => stop())
-      resolve(outcome)
-    }
-    void validation.then(finish)
-    for (const cancellation of cancellations) {
-      if (completed) {
-        break
-      }
-      unsubscribe.push(cancellation.signal.subscribe(() => finish(cancellation.outcome)))
-    }
-  })
-}
-
-function throwIfAborted(authority: ValidationWork): void {
-  if (authority.abortReason) {
-    throw authority.abortReason
-  }
 }
 
 function createResetAbortError(): Error {

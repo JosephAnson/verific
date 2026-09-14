@@ -59,6 +59,10 @@ patch the DOM is a separate concern.
 
 Dirty state compares the current raw registration input with the baseline captured at registration or by `resetState()`. It handles nested plain objects, arrays, cycles, shared references and symbol keys using the same snapshot rules as validation. Missing properties differ from present properties whose value is `undefined`; non-plain objects such as `Date` and `File` compare by identity.
 
+This is a deep comparison for plain objects and arrays. Capturing and comparing
+large models includes the cost of walking those structures; dirty tracking is
+not a constant-time operation.
+
 Computed refs, custom refs and objects with accessor properties are the setup-time safety exception: Verific does not evaluate them during registration. Their dirty baseline is deferred until the first successful state or validation capture, so edits made before that capture become the baseline rather than a dirty change.
 
 `resetState()` first snapshots every active registration. If all captures succeed, it atomically:

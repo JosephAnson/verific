@@ -166,6 +166,11 @@ pending.
 
 ## Resetting state
 
+Cancellation stops Verific from waiting for or publishing a run. Verific does
+not pass a cancellation signal into the schema's validator, so an async
+refinement's underlying request may continue. Request cancellation inside a
+validator remains part of that validator's integration.
+
 `resetState()` is a state rebase, not a value reset. It first captures every
 active input. If all captures succeed, current values become the new dirty
 baselines and Verific atomically clears issues, registration results, touch and
