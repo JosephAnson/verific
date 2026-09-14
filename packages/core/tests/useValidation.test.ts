@@ -107,6 +107,166 @@ describe('useValidation composition', () => {
   })
 })
 
+describe('validation commits', () => {
+  it('revalidates unchanged fields after sibling edits and reset', async () => {
+    const model = reactive({ password: 'a', confirmation: 'b' })
+    const validator = vi.fn((value: typeof model) => value.password === value.confirmation
+      ? { value }
+      : { issues: [{ message: 'Mismatch', path: ['confirmation'] }] })
+    const schema = createSchema<typeof model>('test', validator)
+    const mounted = mountValidation(() => ({ root: useValidation(), child: useValidation(schema, model) }), false)
+    await mounted.value.child.commit('confirmation')
+    model.password = 'b'
+    await mounted.value.child.commit('confirmation')
+    expect(mounted.value.child.hasError('confirmation')).toBe(false)
+    expect(validator).toHaveBeenCalledTimes(2)
+    mounted.value.root.resetState()
+    await mounted.value.child.commit('confirmation')
+    expect(validator).toHaveBeenCalledTimes(3)
+    expect(mounted.value.child.stateFor('confirmation').touched).toBe(true)
+  })
+
+  it('retries rejected commits without requiring an edit', async () => {
+    const validator = vi.fn()
+      .mockRejectedValueOnce(new Error('Offline'))
+      .mockResolvedValue({ value: { email: '' } })
+    const schema = createSchema<{ email: string }>('test', validator)
+    const mounted = mountValidation(() => useValidation(schema, { email: ref('') }), false)
+    await expect(mounted.value.commit('email')).rejects.toThrow('Offline')
+    await mounted.value.commit('email')
+    expect(validator).toHaveBeenCalledTimes(2)
+  })
+
+  it('cancels descendant commit timers when a root resets', async () => {
+    vi.useFakeTimers()
+    try {
+      const validator = vi.fn((value: { email: string }) => ({ value }))
+      const schema = createSchema<{ email: string }>('test', validator)
+      const mounted = mountValidation(() => ({ root: useValidation(), child: useValidation(schema, { email: ref('') }) }), false)
+      const pending = mounted.value.child.commit('email', { debounce: 200 })
+      const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+      mounted.value.root.resetState()
+      await rejection
+      await vi.advanceTimersByTimeAsync(300)
+      expect(validator).not.toHaveBeenCalled()
+      expect(mounted.value.child.stateFor('email').touched).toBe(false)
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('deduplicates pending and settled commits until the model changes', async () => {
+    const validator = vi.fn((value: { email: string }) => value.email
+      ? { value }
+      : { issues: [{ message: 'Email required', path: ['email'] }] })
+    const schema = createSchema<{ email: string }>('test', validator)
+    const email = ref('')
+    const mounted = mountValidation(() => useValidation(schema, { email }), false)
+    const pending = mounted.value.commit('email')
+    expect(mounted.value.commit('email')).toBe(pending)
+    await pending
+    await mounted.value.commit('email')
+    expect(validator).toHaveBeenCalledOnce()
+    expect(mounted.value.hasError('email')).toBe(true)
+    expect(mounted.value.stateFor('email').touched).toBe(true)
+
+    email.value = 'valid@example.com'
+    await nextTick()
+    expect(validator).toHaveBeenCalledOnce()
+    await mounted.value.commit('email')
+    expect(validator).toHaveBeenCalledTimes(2)
+    expect(mounted.value.hasError('email')).toBe(false)
+  })
+
+  it('debounces explicit commits using the latest model value', async () => {
+    vi.useFakeTimers()
+    try {
+      const validator = vi.fn((value: { bio: string }) => ({ value }))
+      const schema = createSchema<{ bio: string }>('test', validator)
+      const bio = ref('')
+      const mounted = mountValidation(() => useValidation(schema, { bio }), false)
+
+      bio.value = 'a'
+      const pending = mounted.value.commit('bio', { debounce: 200 })
+      await vi.advanceTimersByTimeAsync(100)
+      bio.value = 'ab'
+      expect(mounted.value.commit('bio', { debounce: 200 })).toBe(pending)
+      await vi.advanceTimersByTimeAsync(199)
+      expect(validator).not.toHaveBeenCalled()
+      bio.value = 'abc'
+      await vi.advanceTimersByTimeAsync(1)
+      await pending
+      expect(validator).toHaveBeenCalledOnce()
+      expect(validator).toHaveBeenCalledWith({ bio: 'abc' })
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('uses the controller debounce default and lets a commit run immediately', async () => {
+    vi.useFakeTimers()
+    try {
+      const validator = vi.fn((value: { email: string }) => ({ value }))
+      const schema = createSchema<{ email: string }>('test', validator)
+      const email = ref('')
+      const mounted = mountValidation(() => useValidation(schema, { email }, { debounce: 100 }), false)
+
+      email.value = 'first@example.com'
+      const pending = mounted.value.commit('email')
+      await vi.advanceTimersByTimeAsync(99)
+      expect(validator).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+      await pending
+      expect(validator).toHaveBeenCalledOnce()
+
+      email.value = 'second@example.com'
+      const queued = mounted.value.commit('email')
+      const immediate = mounted.value.commit('email', { debounce: 0 })
+      expect(await queued).toEqual(await immediate)
+      await vi.advanceTimersByTimeAsync(100)
+      expect(validator).toHaveBeenCalledTimes(2)
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('commits an array path after replacement and in-place edits', async () => {
+    const validator = vi.fn((value: { interests: string[] }) => ({ value }))
+    const schema = createSchema<{ interests: string[] }>('test', validator)
+    const interests = ref<string[]>([])
+    const mounted = mountValidation(() => useValidation(schema, { interests }), false)
+    interests.value = ['design']
+    await mounted.value.commit('interests')
+    expect(validator).toHaveBeenCalledOnce()
+
+    interests.value.push('testing')
+    await mounted.value.commit('interests')
+    expect(validator).toHaveBeenCalledTimes(2)
+
+    interests.value.push('accessibility')
+    await mounted.value.commit('interests')
+    expect(validator).toHaveBeenCalledTimes(3)
+    expect(mounted.value.stateFor('interests').touched).toBe(true)
+    expect(mounted.value.stateFor(['interests', 0]).touched).toBe(false)
+  })
+
+  it('cancels a debounced commit when its component is disposed', async () => {
+    vi.useFakeTimers()
+    const schema = createSchema<{ email: string }>('test', value => ({ value }))
+    const mounted = mountValidation(() => useValidation(schema, { email: ref('') }), false)
+    const pending = mounted.value.commit('email', { debounce: 200 })
+    const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+
+    mounted.app.unmount()
+
+    await rejection
+    vi.useRealTimers()
+  })
+})
+
 describe('validation state and paths', () => {
   it('preserves raw issues, normalises paths and selects exact relative paths', async () => {
     const rawParent = { message: 'Address issue', path: [{ key: 'address' }] }

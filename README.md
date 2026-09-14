@@ -27,12 +27,7 @@ import { z } from 'zod'
 
 const email = ref('')
 const schema = z.object({ email: z.string().email() })
-const { errorsFor, hasError, state, touch, validate, validateAt } = useValidation(schema, { email })
-
-async function onEmailBlur() {
-  touch('email')
-  await validateAt('email')
-}
+const { commit, errorsFor, hasError, state, validate } = useValidation(schema, { email })
 
 async function submit() {
   const result = await validate()
@@ -55,7 +50,7 @@ async function submit() {
       required
       :aria-invalid="hasError('email')"
       aria-describedby="email-errors"
-      @blur="onEmailBlur"
+      @blur="commit('email')"
     >
     <div id="email-errors" aria-live="polite">
       <p v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
@@ -69,9 +64,9 @@ async function submit() {
 </template>
 ```
 
-`validateAt('email')` runs the complete schema but publishes only that exact
-path. The blur handler records interaction explicitly because validation alone
-never marks a path touched. Use `validate()` for submit: it publishes the
+`commit('email')` touches and validates the current value, with deduplication
+and optional debounce. Choose events and accessibility props for your own
+controls; Verific reads the model you already own. Use `validate()` for submit: it publishes the
 complete form result and owns transformed schema output.
 The aggregate state guard prevents submission from using an older async
 snapshot after the model changes.

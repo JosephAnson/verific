@@ -547,7 +547,7 @@ function stampsEqual<Registration extends ObservableRegistration>(
   })
 }
 
-function structurallyEqual(
+export function structurallyEqual(
   actual: unknown,
   expected: unknown,
   actualToExpected = new WeakMap<object, object>(),

@@ -3,6 +3,7 @@ export { useValidation } from './composables/useValidation'
 export type {
   RegistrationResult,
   TargetValidationResult,
+  ValidationCommitOptions,
   ValidationController,
   ValidationData,
   ValidationFields,

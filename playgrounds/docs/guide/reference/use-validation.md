@@ -10,11 +10,11 @@ application-wide message resolution or issue normalisation.
 Most forms begin with the same destructured interface:
 
 ```ts
-const { errorsFor, hasError, touch, validate, validateAt } = useValidation(schema, model)
+const { commit, errorsFor, hasError, validate, validateAt } = useValidation(schema, model)
 ```
 
-Use `errorsFor()` and `hasError()` to render one field, call `touch()` then
-`validateAt()` after an interaction, and use `validate()` before submission. See
+Use `errorsFor()` and `hasError()` to render one field, call `commit()` after an
+interaction, and use `validate()` before submission. See
 [Binding form controls](../core/form-controls) for practical event and value
 patterns and [Form state](../core/form-state) for dirty, touched and validation
 currency.
@@ -75,6 +75,34 @@ actions used by most forms:
 | `validateAt(path)` | `Promise<TargetValidationResult>` | Run complete matching schemas and publish fresh issues only at one exact path. |
 | `validate()` | `Promise<ValidationResult>` | Validate every active registration in the scope. |
 
+Schema-owning controllers also expose an explicit interaction action:
+
+| Member | Type | Meaning |
+| --- | --- | --- |
+| `commit(path, options?)` | `Promise<TargetValidationResult>` | Touch and validate an application-owned value, deduplicating unchanged commits. |
+
+`commit()` accepts `ValidationCommitOptions`, containing an optional `debounce`
+in milliseconds. It reads the model after the delay, touches the selected path,
+then runs targeted validation. A later commit for the same path restarts the
+delay and shares the queued promise. Pass `{ debounce: 0 }` to run immediately.
+Reset and disposal cancel queued commits with an `AbortError`.
+The debounce delay precedes validation and is not included in `isValidating`
+or `stateFor(path).validating`.
+
+Deduplication compares the complete matching schema inputs, schema identities
+and registrations. Equivalent pending requests share a promise; a settled result
+is reused only while its validation state remains fresh. Sibling edits and
+rejected runs therefore allow the next commit to validate again.
+
+The application chooses which event calls `commit()` and how to present errors.
+Verific does not return control props or event handlers. For submit-only
+validation, call only `validate()`. For separate interaction and validation
+timing, use `touch()` and `validateAt()` independently.
+
+Like `validateAt()`, each non-deduplicated commit runs the **complete matching
+schemas**, including async and cross-field rules, then publishes only the exact
+path's issues. Debounce reduces the number of runs; it does not narrow a schema.
+
 `TargetValidationResult` contains only a readonly `issues` array. It has no
 submission status or transformed output. `ValidationResult` is returned only by
 full `validate()` and exposes the whole-scope `success` status.
@@ -100,7 +128,7 @@ validation state, or a single resolved error:
 | Flag | Meaning |
 | --- | --- |
 | `dirty` | Current raw input differs structurally from its baseline; reverting restores clean state. |
-| `touched` | The application explicitly called `touch(path)`; validation never does this automatically. |
+| `touched` | The application called `touch(path)` or a `commit(path)` began validation. `validate()` and `validateAt()` do not touch paths. |
 | `validated` | An authoritative commit covers the state; only full validation covers the aggregate. |
 | `stale` | The current registration set, schema identity or complete input differs from that commit. |
 | `validating` | Authoritative work that can affect this state is pending. |
@@ -154,6 +182,7 @@ Schema registrations also accept:
 | Option | Type | Purpose |
 | --- | --- | --- |
 | `at` | `readonly PropertyKey[]` | Prefix issue paths without changing the value passed to the schema. |
+| `debounce` | `number` | Set the default delay in milliseconds for explicit `commit()` calls. Defaults to `0`; each call can override it. Must be finite and non-negative. |
 
 ```ts
 const { errorsFor, hasError, validateAt } = useValidation(addressSchema, address, {

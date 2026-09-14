@@ -14,12 +14,7 @@ import { z } from 'zod'
 
 const email = ref('')
 const schema = z.object({ email: z.string().email() })
-const { errorsFor, hasError, state, touch, validate, validateAt } = useValidation(schema, { email })
-
-async function onEmailBlur() {
-  touch('email')
-  await validateAt('email')
-}
+const { commit, errorsFor, hasError, state, validate } = useValidation(schema, { email })
 
 async function submit() {
   const result = await validate()
@@ -42,7 +37,7 @@ async function submit() {
       required
       :aria-invalid="hasError('email')"
       aria-describedby="email-errors"
-      @blur="onEmailBlur"
+      @blur="commit('email')"
     >
     <div id="email-errors" aria-live="polite">
       <p v-for="(error, index) in errorsFor('email')" :key="`${index}:${error}`">
@@ -56,9 +51,9 @@ async function submit() {
 </template>
 ```
 
-`validateAt('email')` validates the complete model while publishing only that
-exact path. The blur handler records interaction explicitly because validation
-does not mark a path touched. Use full `validate()` as the submission gate and
+`commit('email')` touches and validates the current value, with deduplication
+and optional debounce. Choose events and accessibility props for your own
+controls; Verific reads the model you already own. Use full `validate()` as the submission gate and
 to populate typed transformed output. The aggregate state guard prevents an
 older async snapshot from reaching application submission. See
 [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)

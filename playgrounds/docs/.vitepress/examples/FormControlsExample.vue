@@ -22,7 +22,7 @@ const interests = ref<string[]>([])
 const readyMessage = 'Submit to validate every field.'
 const validMessage = 'The preferences are valid.'
 const submissionMessage = ref(readyMessage)
-const { errorsFor, hasError, state, touch, validate, validateAt } = useValidation(schema, {
+const { commit, errorsFor, hasError, state, validate } = useValidation(schema, {
   age,
   country,
   interests,
@@ -32,34 +32,6 @@ const visibleSubmissionMessage = computed(() => (
     ? 'The preferences changed after validation. Validate again.'
     : submissionMessage.value
 ))
-
-async function onAgeBlur() {
-  submissionMessage.value = readyMessage
-  touch('age')
-  await validateAt('age')
-}
-
-async function onCountryChange(event: Event) {
-  country.value = (event.currentTarget as HTMLSelectElement).value
-  submissionMessage.value = readyMessage
-  touch('country')
-  await validateAt('country')
-}
-
-async function onInterestChange(event: Event) {
-  const control = event.currentTarget as HTMLInputElement
-  const nextInterests = new Set(interests.value)
-
-  if (control.checked)
-    nextInterests.add(control.value)
-  else
-    nextInterests.delete(control.value)
-
-  interests.value = [...nextInterests]
-  submissionMessage.value = readyMessage
-  touch('interests')
-  await validateAt('interests')
-}
 
 async function onSubmit() {
   const result = await validate()
@@ -110,7 +82,7 @@ async function onSubmit() {
             required
             :aria-invalid="hasError('age')"
             aria-describedby="controls-age-errors"
-            @blur="onAgeBlur"
+            @blur="commit('age')"
           >
           <ul id="controls-age-errors" class="verific-example__errors" aria-live="polite" aria-atomic="true">
             <li v-for="(error, index) in errorsFor('age')" :key="`${index}:${error}`">
@@ -123,11 +95,11 @@ async function onSubmit() {
           <label for="controls-country">Country</label>
           <select
             id="controls-country"
-            :value="country"
+            v-model="country"
             required
             :aria-invalid="hasError('country')"
             aria-describedby="controls-country-errors"
-            @change="onCountryChange"
+            @change="commit('country')"
           >
             <option value="">
               Choose a country
@@ -152,6 +124,7 @@ async function onSubmit() {
         data-validation-required-group
         :aria-invalid="hasError('interests')"
         aria-describedby="controls-interests-requirement controls-interests-errors"
+        @change="commit('interests')"
       >
         <legend>Interests (choose at least one — required)</legend>
         <p id="controls-interests-requirement" class="verific-example__hint">
@@ -161,24 +134,22 @@ async function onSubmit() {
           <label class="verific-example__toggle" for="controls-interest-design">
             <input
               id="controls-interest-design"
+              v-model="interests"
               type="checkbox"
               value="design"
-              :checked="interests.includes('design')"
               :aria-invalid="hasError('interests')"
               aria-describedby="controls-interests-requirement controls-interests-errors"
-              @change="onInterestChange"
             >
             Design
           </label>
           <label class="verific-example__toggle" for="controls-interest-testing">
             <input
               id="controls-interest-testing"
+              v-model="interests"
               type="checkbox"
               value="testing"
-              :checked="interests.includes('testing')"
               :aria-invalid="hasError('interests')"
               aria-describedby="controls-interests-requirement controls-interests-errors"
-              @change="onInterestChange"
             >
             Testing
           </label>

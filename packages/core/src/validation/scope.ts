@@ -33,6 +33,8 @@ interface CommittedValidationState {
 }
 
 export interface InternalValidationScope {
+  captureCommitContext: (path: readonly PropertyKey[]) => unknown
+  onReset: (listener: (reason: Error) => void) => () => void
   readonly isValidating: ComputedRef<boolean>
   readIssues: () => readonly ValidationIssue[]
   readErrors: () => readonly string[]
@@ -146,6 +148,7 @@ export function createValidationScope(
   application?: ValidationPolicyOptions,
 ): InternalValidationScope {
   const registrations = new Map<symbol, ValidationRegistration>()
+  const resetListeners = new Set<(reason: Error) => void>()
   const published = shallowRef<PublishedValidationState>({
     committed: { results: new Map(), issues: new Map(), failed: false },
     isValidating: false,
@@ -240,6 +243,8 @@ export function createValidationScope(
     }
 
     const abortReason = createResetAbortError()
+    for (const listener of resetListeners)
+      listener(abortReason)
     rejectBlockedValidations(capture, abortReason)
     observation.commitResetBaselines(baselines)
 
@@ -769,6 +774,13 @@ export function createValidationScope(
 
   return {
     isValidating,
+    captureCommitContext: path => observation.captureAt(path).stampSnapshots.map(({ id, schema, input }) => ({ id, schema, input })),
+    onReset: (listener) => {
+      resetListeners.add(listener)
+      return () => {
+        resetListeners.delete(listener)
+      }
+    },
     readIssues: () => collectIssues(committed.value.issues),
     readErrors: () => collectIssues(committed.value.issues).map(resolveValidationMessage),
     state: observation.state,

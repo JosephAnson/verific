@@ -7,6 +7,7 @@ import { VERIFIC_SYMBOL } from '../utils/constants'
 import { unwrapSchema } from '../utils/schemaUtils'
 import { resolveValidationMessage } from '../validation/issuePipeline'
 import { pathsEqual, selectorSegments } from '../validation/paths'
+import { structurallyEqual } from '../validation/registrationObservation'
 import { createValidationScope } from '../validation/scope'
 
 export type ValidationFields<Schema extends StandardSchemaV1> = {
@@ -40,6 +41,7 @@ export interface ValidationScopeOptions {
 
 export interface ValidationOptions extends ValidationScopeOptions {
   readonly at?: readonly PropertyKey[]
+  readonly debounce?: number
 }
 
 export type ValidationResult
@@ -48,6 +50,10 @@ export type ValidationResult
 
 export interface TargetValidationResult {
   readonly issues: readonly ValidationIssue[]
+}
+
+export interface ValidationCommitOptions {
+  readonly debounce?: number
 }
 
 export type RegistrationResult<Output>
@@ -83,6 +89,7 @@ export interface ValidationController<Schema extends StandardSchemaV1>
   extends ValidationGroup<ValidationPath<Schema>> {
   readonly ownIssues: ComputedRef<readonly ValidationIssue[]>
   readonly result: Readonly<ShallowRef<RegistrationResult<StandardSchemaV1.InferOutput<Schema>>>>
+  commit: (path: ValidationPath<Schema>, options?: ValidationCommitOptions) => Promise<TargetValidationResult>
 }
 
 const localScopes = new WeakMap<object, InternalValidationScope>()
@@ -131,12 +138,158 @@ export function useValidation<Schema extends StandardSchemaV1>(
   const group = createGroup<ValidationPath<Schema>>(scope, groupPrefix)
   const result = computed(() => registration.readResult() as RegistrationResult<StandardSchemaV1.InferOutput<Schema>>)
   const ownIssues = computed(registration.readIssues)
+  const commits = createCommitController(group, scope, groupPrefix, {
+    debounce: options.debounce,
+  })
+
+  if (getCurrentScope()) {
+    onScopeDispose(commits.dispose)
+  }
 
   return {
     ...group,
     ownIssues,
     result: result as unknown as Readonly<ShallowRef<RegistrationResult<StandardSchemaV1.InferOutput<Schema>>>>,
+    commit: commits.commit,
   }
+}
+
+interface CommitRecord {
+  readonly path: readonly PropertyKey[]
+  value: unknown
+  pending?: Promise<TargetValidationResult>
+  queued?: Promise<TargetValidationResult>
+  timer?: ReturnType<typeof setTimeout>
+  resolve?: (result: TargetValidationResult) => void
+  reject?: (reason: unknown) => void
+}
+
+function createCommitController<Path>(
+  group: ValidationGroup<Path>,
+  scope: InternalValidationScope,
+  prefix: readonly PropertyKey[],
+  defaults: ValidationCommitOptions,
+) {
+  const records: CommitRecord[] = []
+  let disposed = false
+  const stopReset = scope.onReset(cancelQueued)
+
+  function readContext(path: Path): unknown {
+    return scope.captureCommitContext([...prefix, ...selectorSegments(path)])
+  }
+
+  function recordFor(path: Path): CommitRecord {
+    const segments = [...selectorSegments(path)]
+    let record = records.find(candidate => pathsEqual(candidate.path, segments))
+    if (!record) {
+      record = { path: Object.freeze(segments), value: Symbol('uncommitted') }
+      records.push(record)
+    }
+    return record
+  }
+
+  function run(path: Path, record: CommitRecord, value: unknown): Promise<TargetValidationResult> {
+    record.value = value
+    group.touch(path)
+    const pending = group.validateAt(path)
+    record.pending = pending
+    void pending.then(() => {
+      if (record.pending === pending) {
+        record.pending = undefined
+      }
+    }, () => {
+      if (record.pending === pending) {
+        record.value = Symbol('failed')
+        record.pending = undefined
+      }
+    })
+    return pending
+  }
+
+  function commit(path: Path, options: ValidationCommitOptions = {}): Promise<TargetValidationResult> {
+    if (disposed)
+      return Promise.reject(abortError())
+    const debounce = options.debounce ?? defaults.debounce ?? 0
+    if (!Number.isFinite(debounce) || debounce < 0)
+      return Promise.reject(new RangeError('debounce must be a finite non-negative number'))
+    const record = recordFor(path)
+    const value = readContext(path)
+    const state = group.stateFor(path)
+    if (!record.queued && structurallyEqual(record.value, value)) {
+      if (record.pending)
+        return record.pending
+      if (state.validated && !state.stale) {
+        group.touch(path)
+        return Promise.resolve({ issues: group.issuesFor(path) })
+      }
+    }
+
+    if (record.timer !== undefined)
+      clearTimeout(record.timer)
+    if (!debounce) {
+      const resolve = record.resolve
+      const reject = record.reject
+      record.queued = undefined
+      record.timer = undefined
+      record.resolve = undefined
+      record.reject = undefined
+      const pending = run(path, record, value)
+      if (resolve)
+        void pending.then(resolve, reject)
+      return pending
+    }
+
+    const pending = record.queued
+      ? record.queued
+      : new Promise<TargetValidationResult>((resolve, reject) => {
+          record.resolve = resolve
+          record.reject = reject
+        })
+    record.queued = pending
+    record.timer = setTimeout(() => {
+      const resolve = record.resolve!
+      const reject = record.reject!
+      record.timer = undefined
+      record.queued = undefined
+      record.resolve = undefined
+      record.reject = undefined
+      try {
+        void run(path, record, readContext(path)).then(resolve, reject)
+      }
+      catch (reason) {
+        reject(reason)
+      }
+    }, debounce)
+    return pending
+  }
+
+  function cancelQueued(reason: Error): void {
+    for (const record of records) {
+      if (record.timer !== undefined) {
+        clearTimeout(record.timer)
+        record.reject?.(reason)
+        record.timer = undefined
+        record.pending = undefined
+        record.resolve = undefined
+        record.reject = undefined
+      }
+    }
+    records.splice(0)
+  }
+
+  function abortError(): Error {
+    const reason = new Error('Validation commit was disposed')
+    reason.name = 'AbortError'
+    return reason
+  }
+
+  function dispose(): void {
+    disposed = true
+    stopReset()
+    cancelQueued(abortError())
+  }
+
+  return { commit, dispose }
 }
 
 function provideScope(instance: object, options: ValidationScopeOptions): InternalValidationScope {
