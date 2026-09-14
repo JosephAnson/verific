@@ -7,7 +7,7 @@ import { computed, shallowRef } from 'vue'
 import { validateWithStandardSchema } from '../utils/schemaUtils'
 import { createIssuePipeline, resolveValidationMessage } from './issuePipeline'
 import { pathsEqual } from './paths'
-import { createRegistrationObservation } from './registrationObservation'
+import { createRegistrationObservation, snapshotValidationData } from './registrationObservation'
 
 export interface ScopeRegistrationOptions extends ValidationPolicyOptions {
   readonly at?: readonly PropertyKey[]
@@ -305,7 +305,8 @@ export function createValidationScope(
         if (registrations.get(id) !== registration)
           throw new Error('Validation registration was disposed')
         const resolved = [...at, ...path]
-        const additions = rawIssues.map(raw => issuePipeline.createIssue(raw, 'server', undefined, path))
+        const input = snapshotValidationData(registration.data)
+        const additions = rawIssues.map(raw => issuePipeline.createIssue(raw, 'server', input, path))
         externalIssues.value = [...externalIssues.value.filter(issue => !pathsEqual(issue.path, resolved)), ...additions]
       },
       remove: () => {

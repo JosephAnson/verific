@@ -90,6 +90,25 @@ describe('external issues', () => {
     await expect(root.validate()).resolves.toEqual({ success: true, issues: [] })
   })
 
+  it('normalises server issues against the current registered input', () => {
+    const root = scope()
+    const email = ref<string | undefined>('taken@example.com')
+    const field = root.register(schema<{ email?: string }>(), { email }, {
+      at: ['account'],
+      describeIssue: ({ input }) => ({
+        identifier: input.present && input.value !== undefined ? 'unavailable' : 'required',
+        values: {},
+      }),
+    })
+    const raw = { message: 'Rejected', path: ['unrelated'] }
+    field.setIssues('email', [raw])
+    expect(field.issuesFor('email')[0]?.semantic?.identifier).toBe('unavailable')
+    email.value = undefined
+    field.setIssues('email', [raw])
+    expect(field.issuesFor('email')[0]?.semantic?.identifier).toBe('required')
+    expect(field.issuesFor('email')[0]?.raw).toBe(raw)
+  })
+
   it('preserves external issues when reset cannot capture the model', () => {
     const root = scope()
     let fail = false
