@@ -171,7 +171,10 @@ Build the path from the current array index when the interaction occurs:
 >
 ```
 
-After reordering or removing rows, indices no longer describe the same entries. Run full `validate()` so published issues reflect the new structure before treating them as current. Touched paths are positional too: Verific cannot remap an earlier index to a logical row, so do not use it as stable row identity.
+Use [array helpers](./production-forms#array-helpers) when inserting, moving or
+removing rows so touched state and dirty baselines follow those rows. After a
+structural edit, run full `validate()` when you need issues for the new array.
+Paths are positional; use your application's own stable component keys.
 
 ### Custom controls
 

@@ -1,7 +1,8 @@
 export { ErrorMessages } from './components/ErrorMessages'
-export { useValidation } from './composables/useValidation'
+export { createValidationScope, useValidation } from './composables/useValidation'
 export type {
   RegistrationResult,
+  StandaloneValidationScope,
   TargetValidationResult,
   ValidationCommitOptions,
   ValidationController,
@@ -30,3 +31,5 @@ export type {
 export { createVerific } from './plugin'
 export type { Verific, VerificOptions } from './plugin'
 export type { Messages } from './utils/createMessageArray'
+export type { ValidationArray } from './validation/array'
+export type { SubmitCallback } from './validation/submission'

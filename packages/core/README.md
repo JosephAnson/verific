@@ -59,9 +59,10 @@ older async snapshot from reaching application submission. See
 [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)
 for the recommended value and event patterns.
 
-The package has three runtime exports:
+The package exposes these runtime APIs:
 
 - `useValidation` creates or joins a validation scope;
+- `createValidationScope` creates an explicit scope outside a component;
 - `createVerific` configures application-wide message handling;
 - [`ErrorMessages`](https://verific.josephanson.com/guide/components/error-messages) optionally normalises error inputs.
 

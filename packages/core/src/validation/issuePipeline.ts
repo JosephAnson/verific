@@ -21,6 +21,7 @@ export interface IssuePipeline {
     raw: StandardSchemaV1.Issue,
     vendor: string,
     input: unknown,
+    path?: readonly PropertyKey[],
   ) => ValidationIssue
 }
 
@@ -58,8 +59,8 @@ export function createIssuePipeline(
   ])
 
   return {
-    createIssue(raw, vendor, input) {
-      const localPath = Object.freeze(normalisePath(raw.path))
+    createIssue(raw, vendor, input, selectedPath) {
+      const localPath = Object.freeze(selectedPath ? [...selectedPath] : normalisePath(raw.path))
       const path = Object.freeze([...prefix, ...localPath])
       const context: ValidationIssueContext = {
         raw,

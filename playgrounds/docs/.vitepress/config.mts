@@ -8,6 +8,7 @@ const Start = [
 const CoreConcepts = [
   { text: 'Binding form controls', link: '/guide/core/form-controls' },
   { text: 'Form state', link: '/guide/core/form-state' },
+  { text: 'Server issues, submission and arrays', link: '/guide/core/production-forms' },
   { text: 'Advanced schemas', link: '/guide/core/advanced-schemas' },
   { text: 'Scopes and registrations', link: '/guide/core/nested-validation' },
   { text: 'Issues and errors', link: '/guide/core/issues-and-errors' },

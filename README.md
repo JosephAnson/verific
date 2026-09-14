@@ -73,7 +73,7 @@ snapshot after the model changes.
 See [Binding form controls](https://verific.josephanson.com/guide/core/form-controls)
 for number, choice, file, repeated-row and custom-control patterns.
 
-The `@verific/core` runtime exports are `useValidation`, `createVerific` and
+The `@verific/core` runtime exports are `useValidation`, `createValidationScope`, `createVerific` and
 `ErrorMessages`. Most forms only need `useValidation`; `createVerific` adds
 application-wide message handling, while `ErrorMessages` is an optional error
 input normaliser. See [Rendering errors](https://verific.josephanson.com/guide/components/error-messages).

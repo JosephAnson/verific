@@ -1,14 +1,18 @@
 import type { StandardSchemaV1 } from '@standard-schema/spec'
-import type { ComputedRef, InjectionKey, MaybeRef, ShallowRef } from 'vue'
+import type { ComputedRef, InjectionKey, MaybeRef, Ref, ShallowRef } from 'vue'
 import type { IssueNormaliser, MessageResolver, ValidationIssue } from '../messages'
+import type { ValidationArray } from '../validation/array'
 import type { InternalValidationScope } from '../validation/scope'
-import { computed, getCurrentInstance, getCurrentScope, inject, onScopeDispose, provide } from 'vue'
+import type { SubmitCallback } from '../validation/submission'
+import { computed, effectScope, getCurrentInstance, getCurrentScope, inject, onScopeDispose, provide, unref } from 'vue'
 import { VERIFIC_SYMBOL } from '../utils/constants'
 import { unwrapSchema } from '../utils/schemaUtils'
+import { createArrayHelpers } from '../validation/array'
 import { resolveValidationMessage } from '../validation/issuePipeline'
 import { pathsEqual, selectorSegments } from '../validation/paths'
 import { structurallyEqual } from '../validation/registrationObservation'
-import { createValidationScope } from '../validation/scope'
+import { createValidationScope as createInternalScope } from '../validation/scope'
+import { createSubmission } from '../validation/submission'
 
 export type ValidationFields<Schema extends StandardSchemaV1> = {
   [Key in keyof StandardSchemaV1.InferInput<Schema>]: MaybeRef<StandardSchemaV1.InferInput<Schema>[Key] | undefined>
@@ -70,6 +74,11 @@ export interface ValidationState {
 }
 
 export interface ValidationGroup<Path = PropertyKey | readonly PropertyKey[]> {
+  readonly isSubmitting: ComputedRef<boolean>
+  readonly submitCount: ComputedRef<number>
+  handleSubmit: (callback: SubmitCallback) => () => Promise<ValidationResult>
+  setIssues: (path: Path, issues: readonly StandardSchemaV1.Issue[]) => void
+  clearIssues: (path?: Path) => void
   readonly issues: ComputedRef<readonly ValidationIssue[]>
   readonly errors: ComputedRef<readonly string[]>
   readonly isValidating: ComputedRef<boolean>
@@ -87,12 +96,37 @@ export interface ValidationGroup<Path = PropertyKey | readonly PropertyKey[]> {
 
 export interface ValidationController<Schema extends StandardSchemaV1>
   extends ValidationGroup<ValidationPath<Schema>> {
+  array: <Item>(path: ValidationPath<Schema>, items: Ref<Item[]>) => ValidationArray<Item>
   readonly ownIssues: ComputedRef<readonly ValidationIssue[]>
   readonly result: Readonly<ShallowRef<RegistrationResult<StandardSchemaV1.InferOutput<Schema>>>>
   commit: (path: ValidationPath<Schema>, options?: ValidationCommitOptions) => Promise<TargetValidationResult>
 }
 
+export interface StandaloneValidationScope extends ValidationGroup {
+  register: <Schema extends StandardSchemaV1>(schema: MaybeRef<Schema>, model: ValidationData<Schema>, options?: Omit<ValidationOptions, 'scope'>) => ValidationController<Schema>
+  dispose: () => void
+}
+
+export function createValidationScope(options: Omit<ValidationScopeOptions, 'scope'> = {}): StandaloneValidationScope {
+  const lifetime = effectScope(true)
+  const scope = createInternalScope(options)
+  lifetime.run(() => onScopeDispose(scope.dispose))
+  const group = createGroup(scope, [])
+  if (getCurrentScope())
+    onScopeDispose(() => lifetime.stop())
+  return {
+    ...group,
+    register(schema, model, registrationOptions = {}) {
+      if (!lifetime.active)
+        throw new Error('Validation scope was disposed')
+      return lifetime.run(() => createController(scope, schema, model, registrationOptions, false))!
+    },
+    dispose: () => lifetime.stop(),
+  }
+}
+
 const localScopes = new WeakMap<object, InternalValidationScope>()
+const submissions = new WeakMap<InternalValidationScope, ReturnType<typeof createSubmission>>()
 const VALIDATION_SCOPE_SYMBOL = Symbol('validation-scope') as InjectionKey<InternalValidationScope>
 
 export function useValidation(options?: ValidationScopeOptions): ValidationGroup
@@ -129,8 +163,19 @@ export function useValidation<Schema extends StandardSchemaV1>(
   }
 
   const schema = schemaOrOptions as MaybeRef<Schema>
+  return createController(scope, schema, model as ValidationData<Schema>, options, createScope)
+}
+
+function createController<Schema extends StandardSchemaV1>(
+  scope: InternalValidationScope,
+  schema: MaybeRef<Schema>,
+  model: ValidationData<Schema>,
+  options: ValidationOptions,
+  creatingScope: boolean,
+): ValidationController<Schema> {
+  const groupPrefix = Object.freeze([...(options.at ?? [])])
   unwrapSchema(schema)
-  const registration = scope.addValidation(schema, model as ValidationData<Schema>, options, createScope)
+  const registration = scope.addValidation(schema, model, options, creatingScope)
   if (getCurrentScope()) {
     onScopeDispose(registration.remove)
   }
@@ -150,7 +195,23 @@ export function useValidation<Schema extends StandardSchemaV1>(
     ...group,
     ownIssues,
     result: result as unknown as Readonly<ShallowRef<RegistrationResult<StandardSchemaV1.InferOutput<Schema>>>>,
+    setIssues: (path, issues) => registration.setIssues(selectorSegments(path), issues),
     commit: commits.commit,
+    array(path, items) {
+      const local = [...selectorSegments(path)]
+      return createArrayHelpers(items, () => {
+        scope.signal.throwIfAborted()
+        let input: unknown = unref(model)
+        for (const segment of local) {
+          input = typeof input === 'object' && input !== null && Object.hasOwn(input, segment)
+            ? unref(Reflect.get(input, segment))
+            : undefined
+        }
+        if (input !== items.value)
+          throw new Error('Array ref must be the registered model property')
+        scope.captureCommitContext([...groupPrefix, ...local])
+      }, (order, updateModel) => scope.remapArray([...groupPrefix, ...local], order, updateModel))
+    },
   }
 }
 
@@ -172,7 +233,7 @@ function createCommitController<Path>(
 ) {
   const records: CommitRecord[] = []
   let disposed = false
-  const stopReset = scope.onReset(cancelQueued)
+  const stopReset = scope.onCancel(cancelQueued)
 
   function readContext(path: Path): unknown {
     return scope.captureCommitContext([...prefix, ...selectorSegments(path)])
@@ -294,7 +355,8 @@ function createCommitController<Path>(
 
 function provideScope(instance: object, options: ValidationScopeOptions): InternalValidationScope {
   const application = inject(VERIFIC_SYMBOL, undefined)
-  const scope = createValidationScope(options, application?.options)
+  const scope = createInternalScope(options, application?.options)
+  onScopeDispose(scope.dispose)
   localScopes.set(instance, scope)
   provide(VALIDATION_SCOPE_SYMBOL, scope)
   return scope
@@ -302,6 +364,11 @@ function provideScope(instance: object, options: ValidationScopeOptions): Intern
 
 function createGroup<Path>(scope: InternalValidationScope, prefix: readonly PropertyKey[]): ValidationGroup<Path> {
   const issues = computed(scope.readIssues)
+  let submission = submissions.get(scope)
+  if (!submission) {
+    submission = createSubmission(scope)
+    submissions.set(scope, submission)
+  }
 
   function resolvePath(path: Path): PropertyKey[] {
     return [...prefix, ...selectorSegments(path)]
@@ -322,6 +389,9 @@ function createGroup<Path>(scope: InternalValidationScope, prefix: readonly Prop
 
   return {
     issues,
+    ...submission,
+    setIssues: (path, rawIssues) => scope.setIssues(resolvePath(path), rawIssues),
+    clearIssues: path => scope.clearIssues(path === undefined ? undefined : resolvePath(path)),
     errors: computed(scope.readErrors),
     isValidating: computed(() => scope.isValidating.value),
     state: scope.state,
