@@ -104,7 +104,7 @@ validators.
 Install the adapter and its tested Vue I18n version:
 
 ```bash
-pnpm add @verific/core @verific/nuxt @verific/vue-i18n vue-i18n@11.1.12
+pnpm add @verific/core @verific/nuxt @verific/i18n vue-i18n@11.1.12
 ```
 
 Disable the module's default Verific plugin. It still auto-imports
@@ -145,7 +145,7 @@ Verific adapter.
 
 ```ts [plugins/verific.ts]
 import { createVerific } from '@verific/core'
-import { vueI18nMessages } from '@verific/vue-i18n'
+import { vueI18nMessages } from '@verific/i18n/vue-i18n'
 import { createI18n } from 'vue-i18n'
 import createI18nOptions from '~/i18n/i18n.config'
 
@@ -194,7 +194,7 @@ following block is a focused replacement for the `useValidation` call in the
 [complete accessible form](#validate-a-form):
 
 ```ts
-import { vueI18nMessages } from '@verific/vue-i18n'
+import { vueI18nMessages } from '@verific/i18n/vue-i18n'
 
 const composer = useI18n({
   useScope: 'local',
@@ -266,7 +266,7 @@ missing-key tests.
 | Integration | Direct dependency | Supported range | Tested baseline |
 | --- | --- | --- | --- |
 | `@verific/nuxt` | Nuxt | `>=3.21 <5` | `3.21.11`, `4.5.2` |
-| `@verific/vue-i18n` | Vue I18n | `>=11.1.12 <11.2` | `11.1.12` |
+| `@verific/i18n/vue-i18n` | Vue I18n | `>=11.1.12 <11.2` | `11.1.12` |
 
 `@verific/nuxt` has no Vue I18n, Nuxt I18n or adapter peer. Applications install
 only the locale runtime and adapter they use.

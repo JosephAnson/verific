@@ -74,18 +74,13 @@ async function main() {
 
 async function assertPackedExports(directory) {
   console.warn('\nPacked core and Vue I18n adapter exports')
-  if (!existsSync(join(directory, 'node_modules/@verific/vue-i18n/README.md'))) {
+  if (!existsSync(join(directory, 'node_modules/@verific/i18n/README.md'))) {
     throw new Error('Packed Vue I18n adapter is missing its README.')
   }
   await run(process.execPath, [
     '--input-type=module',
     '--eval',
-    'import { createVerific, useValidation } from \'@verific/core\'; import { vueI18nMessages } from \'@verific/vue-i18n\'; if (![createVerific, useValidation, vueI18nMessages].every(value => typeof value === \'function\')) throw new Error(\'Missing ESM export\')',
-  ], directory)
-  await run(process.execPath, [
-    '--input-type=commonjs',
-    '--eval',
-    'const { createVerific, useValidation } = require(\'@verific/core\'); const { vueI18nMessages } = require(\'@verific/vue-i18n\'); if (![createVerific, useValidation, vueI18nMessages].every(value => typeof value === \'function\')) throw new Error(\'Missing CommonJS export\')',
+    'import { createVerific, useValidation } from \'@verific/core\'; import { vueI18nMessages } from \'@verific/i18n/vue-i18n\'; if (![createVerific, useValidation, vueI18nMessages].every(value => typeof value === \'function\')) throw new Error(\'Missing ESM export\')',
   ], directory)
 }
 
@@ -93,13 +88,10 @@ async function packPackages(tarballDirectory) {
   const packageDirectories = [
     'packages/core',
     'packages/i18n',
-    'packages/i18next',
-    'packages/paraglide',
-    'packages/vue-i18n',
     'packages/nuxt',
   ]
   const expectedBuilds = packageDirectories.map(packageDirectory => (
-    packageDirectory === 'packages/nuxt' ? 'dist/module.mjs' : 'dist/main.mjs'
+    packageDirectory === 'packages/nuxt' ? 'dist/module.mjs' : 'dist/main.js'
   ))
   const result = {}
 
@@ -146,9 +138,6 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
   assertPackagesAbsent(directory, [
     '@inlang/paraglide-js',
     '@verific/i18n',
-    '@verific/i18next',
-    '@verific/paraglide',
-    '@verific/vue-i18n',
     'i18next',
     'i18next-vue',
     'vue-i18n',
@@ -156,23 +145,12 @@ async function assertCoreOnlyConsumer(temporaryRoot, tarballs) {
   assertDeclaration(directory, '@verific/core', 'dist/main.d.ts')
 
   const stateExercise = coreStateExercise()
-  await assertModuleFormats(directory, {
+  await assertEsmModule(directory, {
     esm: `
       import { createVerific, useValidation } from '@verific/core'
       import { createSSRApp, h, reactive } from 'vue'
       import { renderToString } from 'vue/server-renderer'
       ${stateExercise}
-    `,
-    cjs: `
-      const { createVerific, useValidation } = require('@verific/core')
-      const { createSSRApp, h, reactive } = require('vue')
-      const { renderToString } = require('vue/server-renderer')
-      ;(async () => {
-        ${stateExercise}
-      })().catch((error) => {
-        console.error(error)
-        process.exitCode = 1
-      })
     `,
   })
   await assertTypes(directory, `
@@ -358,9 +336,6 @@ async function assertSharedI18nConsumer(temporaryRoot, tarballs) {
   ])
   assertPackagesAbsent(directory, [
     '@inlang/paraglide-js',
-    '@verific/i18next',
-    '@verific/paraglide',
-    '@verific/vue-i18n',
     'i18next',
     'i18next-vue',
     'vue-i18n',
@@ -378,9 +353,8 @@ async function assertSharedI18nConsumer(temporaryRoot, tarballs) {
     assertResolution(adapter, 'Required')
     assertMissing(adapter)
   `
-  await assertModuleFormats(directory, {
+  await assertEsmModule(directory, {
     esm: `${esmResolutionHelpers()}${exercise(`import { createCatalogueMessages } from '@verific/i18n'`)}`,
-    cjs: `${cjsResolutionHelpers()}${exercise(`const { createCatalogueMessages } = require('@verific/i18n')`)}`,
   })
   await assertTypes(directory, `
     import type { CatalogueMessageDriver } from '@verific/i18n'
@@ -396,16 +370,13 @@ async function assertVueI18nConsumer(temporaryRoot, tarballs) {
     'vue-i18n@11.1.12',
     tarballs['packages/core'],
     tarballs['packages/i18n'],
-    tarballs['packages/vue-i18n'],
   ])
   assertPackagesAbsent(directory, [
     '@inlang/paraglide-js',
-    '@verific/i18next',
-    '@verific/paraglide',
     'i18next',
     'i18next-vue',
   ])
-  assertDeclaration(directory, '@verific/vue-i18n', 'dist/main.d.ts')
+  assertDeclaration(directory, '@verific/i18n', 'dist/vue-i18n.d.ts')
 
   const exercise = moduleSyntax => `
     ${moduleSyntax}
@@ -414,12 +385,11 @@ async function assertVueI18nConsumer(temporaryRoot, tarballs) {
     assertResolution(adapter, 'Required')
     assertMissing(adapter)
   `
-  await assertModuleFormats(directory, {
-    esm: `${esmResolutionHelpers()}${exercise(`import { vueI18nMessages } from '@verific/vue-i18n'; import { createI18n } from 'vue-i18n'`)}`,
-    cjs: `${cjsResolutionHelpers()}${exercise(`const { vueI18nMessages } = require('@verific/vue-i18n'); const { createI18n } = require('vue-i18n')`)}`,
+  await assertEsmModule(directory, {
+    esm: `${esmResolutionHelpers()}${exercise(`import { vueI18nMessages } from '@verific/i18n/vue-i18n'; import { createI18n } from 'vue-i18n'`)}`,
   })
   await assertTypes(directory, `
-    import { vueI18nMessages } from '@verific/vue-i18n'
+    import { vueI18nMessages } from '@verific/i18n/vue-i18n'
     import { createI18n } from 'vue-i18n'
     const i18n = createI18n({ legacy: false, locale: 'en', messages: {} })
     vueI18nMessages(i18n.global)
@@ -432,16 +402,13 @@ async function assertI18nextConsumer(temporaryRoot, tarballs) {
     'vue@3.5.42',
     tarballs['packages/core'],
     tarballs['packages/i18n'],
-    tarballs['packages/i18next'],
   ])
   assertPackagesAbsent(directory, [
     '@inlang/paraglide-js',
-    '@verific/paraglide',
-    '@verific/vue-i18n',
     'i18next-vue',
     'vue-i18n',
   ])
-  assertDeclaration(directory, '@verific/i18next', 'dist/main.d.ts')
+  assertDeclaration(directory, '@verific/i18n', 'dist/i18next.d.ts')
 
   const exercise = moduleSyntax => `
     ${moduleSyntax}
@@ -452,12 +419,11 @@ async function assertI18nextConsumer(temporaryRoot, tarballs) {
     assertMissing(adapter)
     adapter.dispose()
   `
-  await assertModuleFormats(directory, {
-    esm: `${esmResolutionHelpers()}${exercise(`import { i18nextMessages } from '@verific/i18next'; import { createInstance } from 'i18next'`)}`,
-    cjs: `${cjsResolutionHelpers()}(async () => {${exercise(`const { i18nextMessages } = require('@verific/i18next'); const { createInstance } = require('i18next')`)}})().catch(error => { console.error(error); process.exitCode = 1 })`,
+  await assertEsmModule(directory, {
+    esm: `${esmResolutionHelpers()}${exercise(`import { i18nextMessages } from '@verific/i18n/i18next'; import { createInstance } from 'i18next'`)}`,
   })
   await assertTypes(directory, `
-    import { i18nextMessages } from '@verific/i18next'
+    import { i18nextMessages } from '@verific/i18n/i18next'
     import { createInstance } from 'i18next'
     const adapter = i18nextMessages(createInstance())
     adapter.dispose()
@@ -472,16 +438,13 @@ async function assertParaglideConsumer(temporaryRoot, tarballs, generatedDirecto
     'vue@3.5.42',
     tarballs['packages/core'],
     tarballs['packages/i18n'],
-    tarballs['packages/paraglide'],
   ])
   assertPackagesAbsent(directory, [
-    '@verific/i18next',
-    '@verific/vue-i18n',
     'i18next',
     'i18next-vue',
     'vue-i18n',
   ])
-  assertDeclaration(directory, '@verific/paraglide', 'dist/main.d.ts')
+  assertDeclaration(directory, '@verific/i18n', 'dist/paraglide.d.ts')
   await generateParaglideOutput(directory, generatedDirectory)
 
   const exercise = moduleSyntax => `
@@ -494,13 +457,12 @@ async function assertParaglideConsumer(temporaryRoot, tarballs, generatedDirecto
     assertResolution(adapter, 'Introduce una dirección de correo válida')
     assertMissing(adapter)
   `
-  await assertModuleFormats(directory, {
-    esm: `${esmResolutionHelpers()}${exercise(`import { paraglideMessages } from '@verific/paraglide'; import { errors_invalid_email } from '../generated-paraglide/messages/errors_invalid_email.js'`)}`,
-    cjs: `${cjsResolutionHelpers()}(async () => { const { errors_invalid_email } = await import('../generated-paraglide/messages/errors_invalid_email.js'); ${exercise(`const { paraglideMessages } = require('@verific/paraglide')`)} })().catch(error => { console.error(error); process.exitCode = 1 })`,
+  await assertEsmModule(directory, {
+    esm: `${esmResolutionHelpers()}${exercise(`import { paraglideMessages } from '@verific/i18n/paraglide'; import { errors_invalid_email } from '../generated-paraglide/messages/errors_invalid_email.js'`)}`,
   })
 
   await assertTypes(directory, `
-    import { paraglideMessages } from '@verific/paraglide'
+    import { paraglideMessages } from '@verific/i18n/paraglide'
     import { errors_invalid_email } from '../generated-paraglide/messages/errors_invalid_email.js'
     const adapter = paraglideMessages({ 'errors.required': errors_invalid_email }, {
       fallbackPrefix: 'errors',
@@ -521,9 +483,6 @@ async function assertPackedDocumentationExamples(temporaryRoot, tarballs, genera
     'vue-i18n@11.1.12',
     tarballs['packages/core'],
     tarballs['packages/i18n'],
-    tarballs['packages/i18next'],
-    tarballs['packages/paraglide'],
-    tarballs['packages/vue-i18n'],
   ])
   const examples = join(directory, 'examples')
   await cp(join(root, 'playgrounds/docs/guide/localisation/examples'), examples, { recursive: true })
@@ -583,11 +542,9 @@ function assertDeclaration(directory, packagePath, declaration) {
   }
 }
 
-async function assertModuleFormats(directory, sources) {
+async function assertEsmModule(directory, sources) {
   await writeFile(join(directory, 'entry.mjs'), sources.esm)
   await run(process.execPath, ['entry.mjs'], directory)
-  await writeFile(join(directory, 'entry.cjs'), sources.cjs)
-  await run(process.execPath, ['entry.cjs'], directory)
 }
 
 async function assertTypes(directory, source) {
@@ -607,10 +564,6 @@ async function assertTypes(directory, source) {
 }
 
 function esmResolutionHelpers() {
-  return resolutionHelpers()
-}
-
-function cjsResolutionHelpers() {
   return resolutionHelpers()
 }
 
@@ -712,7 +665,6 @@ async function createConsumer(temporaryRoot, name, nuxtVersion, tarballs, locali
     dependencies.push(
       'vue-i18n@11.1.12',
       tarballs['packages/i18n'],
-      tarballs['packages/vue-i18n'],
     )
   }
 
@@ -759,8 +711,6 @@ async function createAdapterConsumer(
     'vue-tsc@3.3.11',
     tarballs['packages/core'],
     tarballs['packages/i18n'],
-    tarballs['packages/i18next'],
-    tarballs['packages/paraglide'],
     tarballs['packages/nuxt'],
   ], directory, {
     ...process.env,
@@ -930,7 +880,7 @@ async function assertAdapterRequestIsolation(directory, nuxtVersion, adapter) {
 async function assertRequestLocalTypes(directory) {
   await assertTypes(directory, `
     import { createVerific } from '@verific/core'
-    import { vueI18nMessages } from '@verific/vue-i18n'
+    import { vueI18nMessages } from '@verific/i18n/vue-i18n'
     import { createSSRApp, h } from 'vue'
     import { createI18n } from 'vue-i18n'
 
@@ -942,7 +892,7 @@ async function assertRequestLocalTypes(directory) {
 }
 
 function assertLocalePackagesAbsent(directory) {
-  for (const packagePath of ['@nuxtjs/i18n', '@verific/vue-i18n', 'vue-i18n']) {
+  for (const packagePath of ['@nuxtjs/i18n', '@verific/i18n', 'vue-i18n']) {
     if (existsSync(join(directory, 'node_modules', packagePath))) {
       throw new Error(`Localisation-disabled consumer unexpectedly installed ${packagePath}.`)
     }

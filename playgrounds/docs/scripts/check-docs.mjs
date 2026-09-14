@@ -536,28 +536,28 @@ async function checkAdapterCompatibility(docsRoot, content, failures) {
     {
       factory: 'vueI18nMessages',
       guide: 'vue-i18n.md',
-      packageName: '@verific/vue-i18n',
-      packagePath: 'vue-i18n',
+      packageName: '@verific/i18n/vue-i18n',
+      entry: 'vue-i18n',
       runtimes: ['vue-i18n'],
     },
     {
       factory: 'i18nextMessages',
       guide: 'i18next.md',
-      packageName: '@verific/i18next',
-      packagePath: 'i18next',
+      packageName: '@verific/i18n/i18next',
+      entry: 'i18next',
       runtimes: ['i18next', 'vue'],
     },
     {
       factory: 'paraglideMessages',
       guide: 'paraglide.md',
-      packageName: '@verific/paraglide',
-      packagePath: 'paraglide',
+      packageName: '@verific/i18n/paraglide',
+      entry: 'paraglide',
       runtimes: ['@inlang/paraglide-js'],
     },
   ]
 
   for (const adapter of adapters) {
-    const packageRoot = join(repositoryRoot, 'packages', adapter.packagePath)
+    const packageRoot = join(repositoryRoot, 'packages', 'i18n')
     let manifest
     let source
     let readme
@@ -565,7 +565,7 @@ async function checkAdapterCompatibility(docsRoot, content, failures) {
     try {
       [manifest, source, readme] = await Promise.all([
         readFile(join(packageRoot, 'package.json'), 'utf8').then(JSON.parse),
-        readFile(join(packageRoot, 'src', 'main.ts'), 'utf8'),
+        readFile(join(packageRoot, 'src', `${adapter.entry}.ts`), 'utf8'),
         readFile(join(packageRoot, 'README.md'), 'utf8'),
       ])
     }
@@ -1119,17 +1119,17 @@ const errorsFor = () => []
 }
 
 async function runSelfTest() {
-  const compatibilityTable = '| `@verific/i18next` | `i18next` | `>=26 <27` | `26.4.0` |'
+  const compatibilityTable = '| `@verific/i18n/i18next` | `i18next` | `>=26 <27` | `26.4.0` |'
   assert.equal(compatibilityEntryMatches(
     compatibilityTable,
-    '@verific/i18next',
+    '@verific/i18n/i18next',
     'i18next',
     '>=26 <27',
     '26.4.0',
   ), true)
   assert.equal(compatibilityEntryMatches(
     compatibilityTable.replace('>=26 <27', '>=25 <27'),
-    '@verific/i18next',
+    '@verific/i18n/i18next',
     'i18next',
     '>=26 <27',
     '26.4.0',

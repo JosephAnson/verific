@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import type { DiagnosticMessageAdapter, MessageContext, ValidationIssue } from '@verific/core'
-import type { vueI18nMessages } from '../src/main'
+import type { vueI18nMessages } from '../../src/vue-i18n'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -47,7 +47,7 @@ describe('browser production bundle', () => {
 
     try {
       await build({
-        entry: [fileURLToPath(new URL('../src/main.ts', import.meta.url))],
+        entry: [fileURLToPath(new URL('../../src/vue-i18n.ts', import.meta.url))],
         outDir: outputDirectory,
         format: ['iife'],
         platform: 'browser',
@@ -55,11 +55,10 @@ describe('browser production bundle', () => {
         define: { 'process.env.NODE_ENV': JSON.stringify('production') },
         clean: false,
         dts: false,
-        noExternal: ['@verific/i18n'],
         silent: true,
       })
 
-      const bundle = await readFile(join(outputDirectory, 'main.global.js'), 'utf8')
+      const bundle = await readFile(join(outputDirectory, 'vue-i18n.global.js'), 'utf8')
       const warn = vi.fn()
       const browser = { console: { warn } } as {
         VerificVueI18n?: { vueI18nMessages: typeof vueI18nMessages }

@@ -1,10 +1,10 @@
 import type {
   ConformanceLocale,
   ConformanceLookup,
-} from '../../../tests/support/localeAdapterConformance'
+} from '../../../../tests/support/localeAdapterConformance'
 import { ref } from 'vue'
-import { defineLocaleAdapterConformance } from '../../../tests/support/localeAdapterConformance'
-import { paraglideMessages } from '../src/main'
+import { defineLocaleAdapterConformance } from '../../../../tests/support/localeAdapterConformance'
+import { paraglideMessages } from '../../src/paraglide'
 
 type Inputs = Readonly<Record<string, string | number | boolean | null>>
 type MessageFunction = (inputs?: Inputs, options?: { locale?: ConformanceLocale }) => string

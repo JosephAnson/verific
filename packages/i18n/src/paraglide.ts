@@ -1,6 +1,6 @@
 import type { DiagnosticMessageAdapter } from '@verific/core'
-import type { CatalogueMessagesOptions } from '@verific/i18n'
-import { createCatalogueMessages } from '@verific/i18n'
+import type { CatalogueMessagesOptions } from './main'
+import { createCatalogueMessages } from './main'
 
 export interface ParaglideMessagesOptions<Locale extends string>
   extends CatalogueMessagesOptions {

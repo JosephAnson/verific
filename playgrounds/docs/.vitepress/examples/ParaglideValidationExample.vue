@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { CatalogueMissingMessageDiagnostic } from '@verific/i18n'
 import { useValidation } from '@verific/core'
-import { paraglideMessages } from '@verific/paraglide'
+import { paraglideMessages } from '@verific/i18n/paraglide'
 import { computed, ref } from 'vue'
 import { z } from 'zod'
 import { errors_invalid_email } from '../../guide/localisation/examples/paraglide/messages/errors_invalid_email.js'

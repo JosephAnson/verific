@@ -1,6 +1,6 @@
 {
   "name": "@verific/core",
-  "type": "commonjs",
+  "type": "module",
   "version": "0.4.0",
   "description": "Vue Validation Library",
   "author": {
@@ -28,24 +28,18 @@
   "sideEffects": false,
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/main.d.mts",
-        "default": "./dist/main.mjs"
-      },
-      "require": {
-        "types": "./dist/main.d.ts",
-        "default": "./dist/main.js"
-      }
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
     }
   },
   "main": "./dist/main.js",
-  "module": "./dist/main.mjs",
+  "module": "./dist/main.js",
   "types": "./dist/main.d.ts",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/main.ts --format cjs,esm --dts --clean",
+    "build": "tsup src/main.ts --format esm --dts --clean",
     "dev": "npm run build -- --watch",
     "test": "vitest run --root ../.. packages/core/tests",
     "typecheck": "tsc --noEmit -p tsconfig.json --skipLibCheck",

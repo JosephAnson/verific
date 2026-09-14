@@ -67,7 +67,7 @@ describe('publishRelease', () => {
       prepareArtifacts,
       repositoryRoot,
       runCommand,
-    })).resolves.toEqual({ packageCount: 6, version })
+    })).resolves.toEqual({ packageCount: 3, version })
 
     expect(inspectCandidate).toHaveBeenCalledOnce()
     expect(inspectIdentity.mock.calls).toEqual([
@@ -79,7 +79,7 @@ describe('publishRelease', () => {
     expect(inspectPublished).toHaveBeenCalledTimes(3)
     expect(prepareArtifacts).toHaveBeenCalledWith(version)
     expect(runCommand.mock.calls.slice(0, 2)).toEqual([authenticationCall, qualityCall])
-    expect(runCommand.mock.calls.slice(2)).toHaveLength(6)
+    expect(runCommand.mock.calls.slice(2)).toHaveLength(3)
 
     for (const [index, call] of runCommand.mock.calls.slice(2).entries()) {
       expect(call).toEqual([
@@ -124,7 +124,7 @@ describe('publishRelease', () => {
       [{ mode: 'retry' }],
       [{ mode: 'retry' }],
     ])
-    expect(runCommand.mock.calls.slice(2)).toHaveLength(5)
+    expect(runCommand.mock.calls.slice(2)).toHaveLength(2)
     for (const [, args] of runCommand.mock.calls.slice(2)) {
       expect(args).toContain('--no-git-checks')
       expect(args).not.toContain('--publish-branch')
@@ -314,7 +314,7 @@ describe('publishRelease', () => {
       prepareArtifacts,
       repositoryRoot,
       runCommand: vi.fn(),
-    })).rejects.toThrow('@verific/vue-i18n is missing from npm')
+    })).rejects.toThrow('@verific/nuxt is missing from npm')
     expect(cleanup).toHaveBeenCalledOnce()
   })
 })
@@ -343,7 +343,7 @@ describe('readPublishedPackages', () => {
       integrity: 'sha512-@verific/core',
       name: '@verific/core',
     })
-    expect(runCommand).toHaveBeenCalledTimes(6)
+    expect(runCommand).toHaveBeenCalledTimes(3)
   })
 
   it('fails closed for registry errors, version drift and missing integrity', () => {
@@ -390,7 +390,7 @@ describe('packReleaseArtifacts', () => {
     const prepared = await packReleaseArtifacts({ repositoryRoot, runCommand, version })
     expect(prepared.artifacts.map(artifact => artifact.name)).toEqual(expectedPublicPackageNames)
     expect(prepared.artifacts.every(artifact => artifact.integrity.startsWith('sha512-'))).toBe(true)
-    expect(runCommand).toHaveBeenCalledTimes(6)
+    expect(runCommand).toHaveBeenCalledTimes(3)
     expect(filenames.every(filename => existsSync(filename))).toBe(true)
 
     await prepared.cleanup()

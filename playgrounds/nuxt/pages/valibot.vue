@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { vueI18nMessages } from '@verific/vue-i18n'
+import { vueI18nMessages } from '@verific/i18n/vue-i18n'
 import * as v from 'valibot'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'

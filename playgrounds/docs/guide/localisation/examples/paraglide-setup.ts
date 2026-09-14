@@ -1,7 +1,7 @@
 import type { MissingMessageMode } from '@verific/i18n'
 import type { App } from 'vue'
 import { createVerific } from '@verific/core'
-import { paraglideMessages } from '@verific/paraglide'
+import { paraglideMessages } from '@verific/i18n/paraglide'
 import { ref } from 'vue'
 import { errors_invalid_email } from './paraglide/messages/errors_invalid_email.js'
 

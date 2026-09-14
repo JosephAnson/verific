@@ -7,10 +7,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@verific/core': fileURLToPath(new URL('../../packages/core/src/main.ts', import.meta.url)),
+      '@verific/i18n/i18next': fileURLToPath(new URL('../../packages/i18n/src/i18next.ts', import.meta.url)),
+      '@verific/i18n/paraglide': fileURLToPath(new URL('../../packages/i18n/src/paraglide.ts', import.meta.url)),
+      '@verific/i18n/vue-i18n': fileURLToPath(new URL('../../packages/i18n/src/vue-i18n.ts', import.meta.url)),
       '@verific/i18n': fileURLToPath(new URL('../../packages/i18n/src/main.ts', import.meta.url)),
-      '@verific/i18next': fileURLToPath(new URL('../../packages/i18next/src/main.ts', import.meta.url)),
-      '@verific/paraglide': fileURLToPath(new URL('../../packages/paraglide/src/main.ts', import.meta.url)),
-      '@verific/vue-i18n': fileURLToPath(new URL('../../packages/vue-i18n/src/main.ts', import.meta.url)),
     },
     dedupe: ['vue'],
   },

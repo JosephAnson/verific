@@ -1,6 +1,6 @@
 import type { MessageContext, ValidationIssue } from '@verific/core'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { paraglideMessages } from '../src/main'
+import { paraglideMessages } from '../../src/paraglide'
 import { errors_min_items } from './fixtures/generated/messages/errors_min_items.js'
 import { errors_required } from './fixtures/generated/messages/errors_required.js'
 

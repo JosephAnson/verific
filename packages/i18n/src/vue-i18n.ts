@@ -2,8 +2,8 @@ import type { DiagnosticMessageAdapter, MessageContext } from '@verific/core'
 import type {
   CatalogueKeyContext,
   CatalogueMessagesOptions,
-} from '@verific/i18n'
-import { createCatalogueMessages } from '@verific/i18n'
+} from './main'
+import { createCatalogueMessages } from './main'
 
 interface VueI18nTranslateOptions<Locale extends string> {
   readonly locale: Locale

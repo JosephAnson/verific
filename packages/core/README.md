@@ -1,5 +1,8 @@
 # `@verific/core`
 
+ESM-only. Import from `@verific/core`; CommonJS entry points are no longer built.
+The core's CI budget is 12 kB minified + gzip with Vue external.
+
 Validation for the Vue models you already own, with error messages in your
 app's locale system. Keep your refs, components and stores; use a Standard Schema
 validator such as Zod or Valibot.

@@ -1,7 +1,7 @@
 import type { MissingMessageMode } from '@verific/i18n'
 import type { App } from 'vue'
 import { createVerific } from '@verific/core'
-import { i18nextMessages } from '@verific/i18next'
+import { i18nextMessages } from '@verific/i18n/i18next'
 import { createInstance } from 'i18next'
 import I18NextVue from 'i18next-vue'
 

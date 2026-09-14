@@ -58,7 +58,7 @@ const validGitState = {
 describe('checkReleaseVersions', () => {
   it('accepts the coordinated stable package set', () => {
     expect(checkReleaseVersions({ packageManifests, rootManifest })).toEqual({
-      publicPackageCount: 6,
+      publicPackageCount: 3,
       tag: releaseTag,
       version: releaseVersion,
     })
@@ -74,7 +74,7 @@ describe('checkReleaseVersions', () => {
       rootManifest,
     })).toEqual({
       commit: releaseCommit,
-      publicPackageCount: 6,
+      publicPackageCount: 3,
       tag: releaseTag,
       version: releaseVersion,
     })
@@ -83,7 +83,7 @@ describe('checkReleaseVersions', () => {
 
   it('ignores private package versions', () => {
     expect(checkReleaseVersions({ packageManifests, rootManifest })).toMatchObject({
-      publicPackageCount: 6,
+      publicPackageCount: 3,
       version: releaseVersion,
     })
   })
@@ -370,7 +370,7 @@ describe('release manifests', () => {
     const repositoryVersion = manifests.rootManifest.manifest.version
 
     expect(checkReleaseVersions(manifests)).toEqual({
-      publicPackageCount: 6,
+      publicPackageCount: 3,
       tag: `v${repositoryVersion}`,
       version: repositoryVersion,
     })

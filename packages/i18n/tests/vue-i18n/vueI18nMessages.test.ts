@@ -7,7 +7,7 @@ import { createVerific, useValidation } from '@verific/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, defineComponent, h, ref } from 'vue'
 import { createI18n, useI18n } from 'vue-i18n'
-import { vueI18nMessages } from '../src/main'
+import { vueI18nMessages } from '../../src/vue-i18n'
 
 function issue(
   path: readonly PropertyKey[] = ['email'],
