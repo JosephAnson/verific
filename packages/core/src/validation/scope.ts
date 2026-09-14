@@ -33,8 +33,13 @@ interface CommittedValidationState {
 }
 
 export interface InternalValidationScope {
+  readonly signal: AbortSignal
+  dispose: () => void
+  remapArray: (path: readonly PropertyKey[], order: readonly (number | null)[], updateModel: () => void) => void
+  setIssues: (path: readonly PropertyKey[], issues: readonly StandardSchemaV1.Issue[]) => void
+  clearIssues: (path?: readonly PropertyKey[]) => void
   captureCommitContext: (path: readonly PropertyKey[]) => unknown
-  onReset: (listener: (reason: Error) => void) => () => void
+  onCancel: (listener: (reason: Error, cause: 'reset' | 'dispose' | 'array') => void) => () => void
   readonly isValidating: ComputedRef<boolean>
   readIssues: () => readonly ValidationIssue[]
   readErrors: () => readonly string[]
@@ -46,6 +51,7 @@ export interface InternalValidationScope {
   ) => {
     readResult: () => ScopeRegistrationResult<unknown>
     readIssues: () => readonly ValidationIssue[]
+    setIssues: (path: readonly PropertyKey[], issues: readonly StandardSchemaV1.Issue[]) => void
     remove: () => void
   }
   readonly state: ComputedRef<ObservedValidationState>
@@ -148,7 +154,10 @@ export function createValidationScope(
   application?: ValidationPolicyOptions,
 ): InternalValidationScope {
   const registrations = new Map<symbol, ValidationRegistration>()
-  const resetListeners = new Set<(reason: Error) => void>()
+  const lifetime = new AbortController()
+  const cancelListeners = new Set<(reason: Error, cause: 'reset' | 'dispose' | 'array') => void>()
+  const externalIssues = shallowRef<readonly ValidationIssue[]>([])
+  const externalPipeline = createIssuePipeline([], { registration: options, root: options, application, creatingScope: true })
   const published = shallowRef<PublishedValidationState>({
     committed: { results: new Map(), issues: new Map(), failed: false },
     isValidating: false,
@@ -173,12 +182,97 @@ export function createValidationScope(
     targetPaths: activeTargets.map(target => target.path),
   }))
 
+  function readIssues(): readonly ValidationIssue[] {
+    return [...collectIssues(committed.value.issues), ...externalIssues.value]
+  }
+
+  function setIssues(path: readonly PropertyKey[], rawIssues: readonly StandardSchemaV1.Issue[]): void {
+    lifetime.signal.throwIfAborted()
+    const additions = rawIssues.map(raw => externalPipeline.createIssue(raw, 'server', undefined, path))
+    externalIssues.value = [...externalIssues.value.filter(issue => !pathsEqual(issue.path, path)), ...additions]
+  }
+
+  function clearIssues(path?: readonly PropertyKey[]): void {
+    lifetime.signal.throwIfAborted()
+    externalIssues.value = path === undefined ? [] : externalIssues.value.filter(issue => !pathsEqual(issue.path, path))
+  }
+
+  function notifyCancellation(reason: Error, cause: 'reset' | 'dispose' | 'array'): void {
+    for (const listener of cancelListeners) {
+      try {
+        listener(reason, cause)
+      }
+      catch {
+        // Reactive observer failures cannot interrupt scope cancellation.
+      }
+    }
+  }
+
+  function cancelWork(reason: Error): void {
+    for (const work of [...unsettledWork]) {
+      work.abortReason = reason
+      work.signal.cancel()
+    }
+    pendingWork.clear()
+    unsettledWork.clear()
+    activeFull = undefined
+    latestFull = undefined
+    activeTargets.splice(0)
+    latestTargets.splice(0)
+  }
+
+  function dispose(): void {
+    if (lifetime.signal.aborted)
+      return
+    const reason = new Error('Validation scope was disposed')
+    reason.name = 'AbortError'
+    lifetime.abort(reason)
+    notifyCancellation(reason, 'dispose')
+    cancelListeners.clear()
+    cancelWork(reason)
+    if (resetCapture)
+      rejectBlockedValidations(resetCapture, reason)
+    for (const [id, registration] of [...registrations]) {
+      observation.removeRegistration(id, registration)
+      registration.disposed.cancel()
+    }
+    externalIssues.value = []
+    safelyPublishCommitted({ results: new Map(), issues: new Map(), failed: false })
+    publishValidatingAndInvalidate(false, false)
+  }
+
+  function remapArray(path: readonly PropertyKey[], order: readonly (number | null)[], updateModel: () => void): void {
+    lifetime.signal.throwIfAborted()
+    if (!observation.beginReset())
+      throw new Error('Array structure cannot change during a validation state update')
+    const capture: ResetCapture = { blockedValidations: [] }
+    resetCapture = capture
+    const reason = new Error('Array structure changed')
+    reason.name = 'AbortError'
+    try {
+      updateModel()
+      observation.remapArray(path, order)
+      notifyCancellation(reason, 'array')
+      cancelWork(reason)
+      observation.beginResetCommit()
+      // Server errors describe the previous request's positional model.
+      externalIssues.value = []
+      safelyPublishCommitted({ results: new Map(), issues: new Map(), failed: false })
+      publishValidatingAndInvalidate(false, false)
+    }
+    finally {
+      rejectBlockedValidations(capture, reason)
+      resetCapture = undefined
+      observation.finishReset()
+    }
+  }
   function addValidation(
     schema: MaybeRef<StandardSchemaV1>,
     data: unknown,
     registrationOptions: ScopeRegistrationOptions,
     creatingScope: boolean,
   ) {
+    lifetime.signal.throwIfAborted()
     const id = Symbol('validation')
     const disposed = createCancellationSignal()
     const at = Object.freeze([...(registrationOptions.at ?? [])])
@@ -206,6 +300,14 @@ export function createValidationScope(
     return {
       readResult: () => committed.value.results.get(id) ?? IDLE_RESULT,
       readIssues: () => committed.value.issues.get(id) ?? [],
+      setIssues: (path: readonly PropertyKey[], rawIssues: readonly StandardSchemaV1.Issue[]) => {
+        lifetime.signal.throwIfAborted()
+        if (registrations.get(id) !== registration)
+          throw new Error('Validation registration was disposed')
+        const resolved = [...at, ...path]
+        const additions = rawIssues.map(raw => issuePipeline.createIssue(raw, 'server', undefined, path))
+        externalIssues.value = [...externalIssues.value.filter(issue => !pathsEqual(issue.path, resolved)), ...additions]
+      },
       remove: () => {
         if (!observation.removeRegistration(id, registration)) {
           return
@@ -225,6 +327,7 @@ export function createValidationScope(
   }
 
   function resetState(): void {
+    lifetime.signal.throwIfAborted()
     if (!observation.beginReset()) {
       return
     }
@@ -243,21 +346,12 @@ export function createValidationScope(
     }
 
     const abortReason = createResetAbortError()
-    for (const listener of resetListeners)
-      listener(abortReason)
+    notifyCancellation(abortReason, 'reset')
     rejectBlockedValidations(capture, abortReason)
     observation.commitResetBaselines(baselines)
+    externalIssues.value = []
 
-    for (const work of [...unsettledWork]) {
-      work.abortReason = abortReason
-      work.signal.cancel()
-    }
-    pendingWork.clear()
-    unsettledWork.clear()
-    activeFull = undefined
-    latestFull = undefined
-    activeTargets.splice(0)
-    latestTargets.splice(0)
+    cancelWork(abortReason)
 
     observation.beginResetCommit()
     try {
@@ -275,6 +369,8 @@ export function createValidationScope(
   }
 
   function validate(): Promise<ScopeValidationResult> {
+    if (lifetime.signal.aborted)
+      return Promise.reject(lifetime.signal.reason)
     if (observation.isResetting()) {
       return blockValidationDuringReset<ScopeValidationResult>(resetCapture!)
     }
@@ -330,6 +426,8 @@ export function createValidationScope(
   }
 
   function validateAt(path: readonly PropertyKey[]): Promise<ScopeTargetValidationResult> {
+    if (lifetime.signal.aborted)
+      return Promise.reject(lifetime.signal.reason)
     if (observation.isResetting()) {
       return blockValidationDuringReset<ScopeTargetValidationResult>(resetCapture!)
     }
@@ -421,8 +519,8 @@ export function createValidationScope(
       if (authority.replacement) {
         return adoptLatestFull(authority, authority.replacement)
       }
-      const issues = collectIssues(committed.value.issues)
-      return failed ? { success: false, issues } : { success: true, issues }
+      const issues = readIssues()
+      return failed || externalIssues.value.length > 0 ? { success: false, issues } : { success: true, issues }
     }
     catch (reason) {
       throwIfAborted(authority)
@@ -512,7 +610,7 @@ export function createValidationScope(
       if (authority.replacement) {
         return adoptTargetReplacement(authority, authority.replacement)
       }
-      return { issues: selectedIssues }
+      return { issues: [...selectedIssues, ...externalIssues.value.filter(issue => pathsEqual(issue.path, authority.path))] }
     }
     catch (reason) {
       throwIfAborted(authority)
@@ -773,16 +871,21 @@ export function createValidationScope(
   }
 
   return {
+    signal: lifetime.signal,
+    dispose,
     isValidating,
+    remapArray,
     captureCommitContext: path => observation.captureAt(path).stampSnapshots.map(({ id, schema, input }) => ({ id, schema, input })),
-    onReset: (listener) => {
-      resetListeners.add(listener)
+    onCancel: (listener) => {
+      cancelListeners.add(listener)
       return () => {
-        resetListeners.delete(listener)
+        cancelListeners.delete(listener)
       }
     },
-    readIssues: () => collectIssues(committed.value.issues),
-    readErrors: () => collectIssues(committed.value.issues).map(resolveValidationMessage),
+    readIssues,
+    readErrors: () => readIssues().map(resolveValidationMessage),
+    setIssues,
+    clearIssues,
     state: observation.state,
     addValidation,
     stateFor: observation.stateFor,

@@ -45,6 +45,7 @@ export interface ResetBaseline<Registration extends ObservableRegistration> {
 }
 
 export interface RegistrationObservation<Registration extends ObservableRegistration> {
+  remapArray: (path: readonly PropertyKey[], order: readonly (number | null)[]) => void
   readonly state: ComputedRef<ObservedValidationState>
   addRegistration: (id: symbol, registration: Registration, onRollback: () => void) => void
   removeRegistration: (id: symbol, registration: Registration) => boolean
@@ -76,6 +77,7 @@ interface RegistrationState<Registration extends ObservableRegistration> {
   readonly registration: Registration
   baseline: unknown
   readonly touched: Array<readonly PropertyKey[]>
+  readonly arrays: Array<{ path: readonly PropertyKey[], baseline: unknown[] }>
 }
 
 interface ValidationStamp<Registration extends ObservableRegistration> {
@@ -125,6 +127,7 @@ export function createRegistrationObservation<Registration extends ObservableReg
         ? UNCAPTURED_BASELINE
         : snapshotValidationData(registration.data),
       touched: [],
+      arrays: [],
     }
     registrations.set(id, registration)
     registrationStates.set(id, registrationState)
@@ -256,7 +259,7 @@ export function createRegistrationObservation<Registration extends ObservableReg
       const localPath = path.slice(snapshot.registration.at.length)
       return !resolvedInputsEqual(
         resolveInput(snapshot.input, localPath),
-        resolveInput(registrationState.baseline, localPath),
+        resolveBaseline(registrationState, localPath),
       )
     })
     const touched = matching.some((snapshot) => {
@@ -294,7 +297,7 @@ export function createRegistrationObservation<Registration extends ObservableReg
       const localPath = path.slice(snapshot.registration.at.length)
       return !resolvedInputsEqual(
         resolveInput(snapshot.input, localPath),
-        resolveInput(registrationState.baseline, localPath),
+        resolveBaseline(registrationState, localPath),
       )
     })
     const touched = matching.some(([id]) => registrationStates.get(id)?.touched.some(
@@ -373,6 +376,7 @@ export function createRegistrationObservation<Registration extends ObservableReg
       if (registrationState?.registration === baseline.registration) {
         registrationState.baseline = baseline.input
         registrationState.touched.splice(0)
+        registrationState.arrays.splice(0)
       }
     }
     fullStamp = undefined
@@ -473,6 +477,58 @@ export function createRegistrationObservation<Registration extends ObservableReg
     stateRevision.value++
   }
 
+  function remapArray(path: readonly PropertyKey[], order: readonly (number | null)[]): void {
+    for (const state of registrationStates.values()) {
+      if (!pathStartsWith(path, state.registration.at))
+        continue
+      const local = path.slice(state.registration.at.length)
+      // Nested array metadata follows its containing row when that row moves.
+      const nested = state.arrays.flatMap((entry) => {
+        if (entry.path.length <= local.length || !pathStartsWith(entry.path, local))
+          return [entry]
+        const index = entry.path[local.length]
+        if (typeof index !== 'number')
+          return [entry]
+        const nextIndex = order.indexOf(index)
+        return nextIndex < 0 ? [] : [{ ...entry, path: [...local, nextIndex, ...entry.path.slice(local.length + 1)] }]
+      })
+      state.arrays.splice(0, state.arrays.length, ...nested)
+      let array = state.arrays.find(entry => pathsEqual(entry.path, local))
+      if (!array) {
+        const original = resolveBaseline(state, local).value
+        array = { path: local, baseline: Array.isArray(original) ? original.slice() : [] }
+        state.arrays.push(array)
+      }
+      const previous = array.baseline
+      const next: unknown[] = Array.from({ length: order.length })
+      order.forEach((oldIndex, newIndex) => {
+        if (oldIndex !== null && Object.hasOwn(previous, oldIndex))
+          next[newIndex] = previous[oldIndex]
+      })
+      array.baseline = next
+      const touched = state.touched.flatMap((selected) => {
+        if (!pathStartsWith(selected, path) || selected.length <= path.length)
+          return [selected]
+        const index = selected[path.length]
+        if (typeof index !== 'number')
+          return [selected]
+        const nextIndex = order.indexOf(index)
+        return nextIndex < 0 ? [] : [[...path, nextIndex, ...selected.slice(path.length + 1)]]
+      })
+      state.touched.splice(0, state.touched.length, ...touched)
+    }
+    // Validation stamps refer to pre-edit positional paths and must not be reused.
+    fullStamp = undefined
+    exactStamps.splice(0)
+  }
+
+  function resolveBaseline(state: RegistrationState<Registration>, local: readonly PropertyKey[]) {
+    const array = state.arrays
+      .filter(entry => local.length > entry.path.length && pathStartsWith(local, entry.path))
+      .sort((left, right) => right.path.length - left.path.length)[0]
+    return array ? resolveInput(array.baseline, local.slice(array.path.length)) : resolveInput(state.baseline, local)
+  }
+
   function safelyInvalidate(): void {
     try {
       invalidate()
@@ -484,6 +540,7 @@ export function createRegistrationObservation<Registration extends ObservableReg
 
   return {
     state,
+    remapArray,
     addRegistration,
     removeRegistration,
     captureAll,

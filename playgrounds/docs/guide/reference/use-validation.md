@@ -74,12 +74,16 @@ actions used by most forms:
 | `touch(path)` | `void` | Record interaction at one exact path. |
 | `validateAt(path)` | `Promise<TargetValidationResult>` | Run complete matching schemas and publish fresh issues only at one exact path. |
 | `validate()` | `Promise<ValidationResult>` | Validate every active registration in the scope. |
+| `setIssues(path, issues)` | `void` | Replace server issues at one exact path without replacing schema issues. |
+| `clearIssues(path?)` | `void` | Clear server issues at one exact path, or throughout the scope when omitted. |
+| `handleSubmit(callback)` | `() => Promise<ValidationResult>` | Run fresh full validation before the callback, deduplicating concurrent submissions. |
 
 Schema-owning controllers also expose an explicit interaction action:
 
 | Member | Type | Meaning |
 | --- | --- | --- |
 | `commit(path, options?)` | `Promise<TargetValidationResult>` | Touch and validate an application-owned value, deduplicating unchanged commits. |
+| `array(path, items)` | `ValidationArray<Item>` | Insert, remove and move rows in the supplied array ref while keeping row metadata aligned. |
 
 `commit()` accepts `ValidationCommitOptions`, containing an optional `debounce`
 in milliseconds. It reads the model after the delay, touches the selected path,
@@ -120,6 +124,8 @@ validation state, or a single resolved error:
 | `issues` | `ComputedRef<readonly ValidationIssue[]>` | All committed issues in the scope. |
 | `errors` | `ComputedRef<readonly string[]>` | All committed issues resolved to display-ready strings. |
 | `isValidating` | `ComputedRef<boolean>` | Whether any full, targeted or queued validation work is pending. |
+| `isSubmitting` | `ComputedRef<boolean>` | Whether submission validation or its callback is pending in the scope. |
+| `submitCount` | `ComputedRef<number>` | Started submission attempts since reset, including invalid attempts. |
 | `issuesFor(path)` | `readonly ValidationIssue[]` | Structured issues at one exact path. |
 | `errorFor(path)` | `string \| undefined` | The first resolved error at one exact path. |
 
@@ -161,6 +167,10 @@ output:
 Destructure `result` when you need registration-local state. The result unions
 and output access pattern are documented under
 [results and transformed output](./validation-lifecycle#results-and-transformed-output).
+
+See [Server issues, submission and arrays](../core/production-forms) for these
+application workflows and the `createValidationScope()` factory for validation
+outside a Vue component.
 
 ## Options
 
