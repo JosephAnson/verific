@@ -24,7 +24,7 @@ RUN pnpm --filter @verific/core build \
   && pnpm --filter @verific/i18n build \
   && pnpm --dir playgrounds/docs build
 
-FROM nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3 AS production-stage
+FROM nginx:alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2 AS production-stage
 
 COPY --from=build /app/playgrounds/docs/.vitepress/dist /usr/share/nginx/html
 
